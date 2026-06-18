@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LinkAI 智能客服演示</title>
+    <link rel="stylesheet" href="assets/customer-service.css">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #111827;
+            background: linear-gradient(135deg, #fff7ed 0%, #f8fafc 45%, #fee2e2 100%);
+        }
+
+        .demo-hero {
+            width: min(1120px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 88px 0;
+        }
+
+        .demo-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 18px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            color: #b91c1c;
+            background: rgba(254, 226, 226, 0.9);
+            font-weight: 700;
+        }
+
+        .demo-hero h1 {
+            max-width: 720px;
+            margin: 0;
+            font-size: clamp(38px, 7vw, 72px);
+            line-height: 1.05;
+        }
+
+        .demo-hero p {
+            max-width: 640px;
+            margin: 24px 0 0;
+            color: #475569;
+            font-size: 18px;
+            line-height: 1.8;
+        }
+
+        .demo-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-top: 42px;
+        }
+
+        .demo-card {
+            padding: 22px;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .demo-card strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #d71920;
+        }
+    </style>
+</head>
+<body>
+    <main class="demo-hero">
+        <span class="demo-kicker">🚗 金三角汽车配件</span>
+        <h1>LinkAI 智能客服网站效果演示</h1>
+        <p>这是一个本地静态预览页面，用来展示 WordPress 插件启用后，网站右下角智能 AI 客服窗口的大致视觉效果。正式使用时请在 WordPress 后台配置 API Key。</p>
+        <section class="demo-cards" aria-label="客服能力">
+            <article class="demo-card"><strong>车型适配咨询</strong>帮助客户确认车型、年份、发动机型号与配件兼容性。</article>
+            <article class="demo-card"><strong>报价与采购引导</strong>收集采购数量、目标规格和联系方式，方便人工跟进。</article>
+            <article class="demo-card"><strong>售后问题分流</strong>引导客户描述订单、故障现象和图片资料。</article>
+        </section>
+    </main>
+
+    <div class="linkai-chat" data-welcome="您好，我是金三角智能客服。您可以咨询汽车配件型号、适配车型、库存、报价和售后问题。">
+        <button class="linkai-chat__toggle" type="button" aria-label="打开智能客服">
+            <span class="linkai-chat__toggle-icon">AI</span>
+            <span class="linkai-chat__toggle-text">在线客服</span>
+        </button>
+        <section class="linkai-chat__panel" aria-label="智能客服聊天窗口">
+            <header class="linkai-chat__header">
+                <div>
+                    <strong>金三角智能客服</strong>
+                    <span>通常几秒内回复</span>
+                </div>
+                <button class="linkai-chat__close" type="button" aria-label="关闭智能客服">×</button>
+            </header>
+            <div class="linkai-chat__messages" role="log" aria-live="polite">
+                <div class="linkai-chat__message linkai-chat__message--assistant">您好，我是金三角智能客服。您可以咨询汽车配件型号、适配车型、库存、报价和售后问题。</div>
+                <div class="linkai-chat__message linkai-chat__message--user">我想找 2018 年丰田卡罗拉的刹车片。</div>
+                <div class="linkai-chat__message linkai-chat__message--assistant">可以的。请问您的车辆排量、前轮还是后轮刹车片、采购数量以及收货城市分别是什么？我会帮您整理给人工客服确认库存和报价。</div>
+            </div>
+            <form class="linkai-chat__form">
+                <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
+                <button class="linkai-chat__send" type="submit">发送</button>
+            </form>
+        </section>
+    </div>
+</body>
+</html>
