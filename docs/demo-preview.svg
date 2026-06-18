@@ -1,0 +1,73 @@
+<svg width="1280" height="800" viewBox="0 0 1280 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff7ed"/>
+      <stop offset="0.55" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#fee2e2"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="890" y1="190" x2="1200" y2="736" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#d71920"/>
+    </linearGradient>
+    <linearGradient id="button" x1="940" y1="700" x2="1198" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d71920"/>
+      <stop offset="1" stop-color="#ff8a00"/>
+    </linearGradient>
+    <filter id="shadow" x="820" y="140" width="420" height="650" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="35" flood-color="#0f172a" flood-opacity="0.24"/>
+    </filter>
+    <filter id="cardShadow" x="40" y="360" width="760" height="180" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="25" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg)"/>
+  <g transform="translate(72 92)">
+    <rect width="192" height="44" rx="22" fill="#fee2e2" fill-opacity="0.9"/>
+    <text x="20" y="29" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#b91c1c">🚗 金三角汽车配件</text>
+    <text x="0" y="130" font-family="Arial, sans-serif" font-size="66" font-weight="800" fill="#111827">LinkAI 智能客服</text>
+    <text x="0" y="206" font-family="Arial, sans-serif" font-size="66" font-weight="800" fill="#111827">网站效果演示</text>
+    <text x="0" y="272" font-family="Arial, sans-serif" font-size="20" fill="#475569">右下角悬浮 AI 在线客服，适合汽车配件咨询、报价引导、</text>
+    <text x="0" y="306" font-family="Arial, sans-serif" font-size="20" fill="#475569">售后分流和人工客服线索收集。</text>
+    <g filter="url(#cardShadow)">
+      <rect x="0" y="360" width="220" height="132" rx="22" fill="white" fill-opacity="0.78" stroke="#94a3b8" stroke-opacity="0.24"/>
+      <text x="22" y="402" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#d71920">车型适配咨询</text>
+      <text x="22" y="438" font-family="Arial, sans-serif" font-size="15" fill="#334155">确认车型、年份、</text>
+      <text x="22" y="464" font-family="Arial, sans-serif" font-size="15" fill="#334155">发动机型号与配件。</text>
+      <rect x="244" y="360" width="220" height="132" rx="22" fill="white" fill-opacity="0.78" stroke="#94a3b8" stroke-opacity="0.24"/>
+      <text x="266" y="402" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#d71920">报价采购引导</text>
+      <text x="266" y="438" font-family="Arial, sans-serif" font-size="15" fill="#334155">收集数量、规格、</text>
+      <text x="266" y="464" font-family="Arial, sans-serif" font-size="15" fill="#334155">城市与联系方式。</text>
+      <rect x="488" y="360" width="220" height="132" rx="22" fill="white" fill-opacity="0.78" stroke="#94a3b8" stroke-opacity="0.24"/>
+      <text x="510" y="402" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#d71920">售后问题分流</text>
+      <text x="510" y="438" font-family="Arial, sans-serif" font-size="15" fill="#334155">引导描述订单、</text>
+      <text x="510" y="464" font-family="Arial, sans-serif" font-size="15" fill="#334155">故障现象和图片。</text>
+    </g>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="850" y="174" width="380" height="560" rx="20" fill="white" stroke="#0f172a" stroke-opacity="0.08"/>
+    <path d="M850 194C850 182.954 858.954 174 870 174H1210C1221.05 174 1230 182.954 1230 194V252H850V194Z" fill="url(#brand)"/>
+    <text x="874" y="213" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="white">金三角智能客服</text>
+    <text x="874" y="236" font-family="Arial, sans-serif" font-size="12" fill="white" fill-opacity="0.82">通常几秒内回复</text>
+    <circle cx="1196" cy="213" r="17" fill="white" fill-opacity="0.16"/>
+    <text x="1188" y="221" font-family="Arial, sans-serif" font-size="24" fill="white">×</text>
+    <rect x="850" y="252" width="380" height="396" fill="#f8fafc"/>
+    <rect x="868" y="276" width="302" height="70" rx="14" fill="white"/>
+    <text x="884" y="305" font-family="Arial, sans-serif" font-size="14" fill="#111827">您好，我是金三角智能客服。</text>
+    <text x="884" y="329" font-family="Arial, sans-serif" font-size="14" fill="#111827">您可以咨询汽车配件型号和报价。</text>
+    <rect x="938" y="366" width="274" height="48" rx="14" fill="#d71920"/>
+    <text x="958" y="397" font-family="Arial, sans-serif" font-size="14" fill="white">我想找 2018 年卡罗拉刹车片。</text>
+    <rect x="868" y="434" width="324" height="92" rx="14" fill="white"/>
+    <text x="884" y="463" font-family="Arial, sans-serif" font-size="14" fill="#111827">可以的。请提供排量、前后轮、</text>
+    <text x="884" y="487" font-family="Arial, sans-serif" font-size="14" fill="#111827">采购数量和收货城市，我会帮您</text>
+    <text x="884" y="511" font-family="Arial, sans-serif" font-size="14" fill="#111827">整理给人工客服确认库存和报价。</text>
+    <line x1="850" y1="648" x2="1230" y2="648" stroke="#e2e8f0"/>
+    <rect x="864" y="662" width="252" height="44" rx="12" fill="white" stroke="#cbd5e1"/>
+    <text x="878" y="690" font-family="Arial, sans-serif" font-size="14" fill="#94a3b8">请输入您的问题...</text>
+    <rect x="1126" y="662" width="80" height="44" rx="12" fill="#d71920"/>
+    <text x="1153" y="690" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="white">发送</text>
+  </g>
+  <rect x="950" y="704" width="208" height="56" rx="28" fill="url(#button)" opacity="0.98"/>
+  <circle cx="980" cy="732" r="15" fill="white" fill-opacity="0.22"/>
+  <text x="972" y="737" font-family="Arial, sans-serif" font-size="14" font-weight="800" fill="white">AI</text>
+  <text x="1006" y="738" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="white">在线客服</text>
+</svg>
