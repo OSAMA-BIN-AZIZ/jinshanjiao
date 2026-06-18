@@ -100,8 +100,14 @@
                 <div class="linkai-chat__message linkai-chat__message--assistant">可以的。请问您的车辆排量、前轮还是后轮刹车片、采购数量以及收货城市分别是什么？我会帮您整理给人工客服确认库存和报价。</div>
             </div>
             <form class="linkai-chat__form">
-                <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
-                <button class="linkai-chat__send" type="submit">发送</button>
+                <div class="linkai-chat__customer-fields">
+                    <input class="linkai-chat__customer-input" name="customer_name" type="text" placeholder="姓名（选填）" value="张先生">
+                    <input class="linkai-chat__customer-input" name="contact" type="text" placeholder="电话/微信（选填）" value="138****8888">
+                </div>
+                <div class="linkai-chat__composer">
+                    <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
+                    <button class="linkai-chat__send" type="submit">发送</button>
+                </div>
             </form>
         </section>
     </div>

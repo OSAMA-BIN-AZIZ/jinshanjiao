@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.1.0';
+    private const VERSION = '1.2.0';
     private const PLUGIN_FILE = __FILE__;
 
     public static function init(): void
@@ -36,6 +36,51 @@ final class LinkAI_AI_Customer_Service
         add_filter('upgrader_source_selection', [__CLASS__, 'rename_github_update_source'], 10, 4);
     }
 
+    public static function activate(): void
+    {
+        self::create_customer_tables();
+    }
+
+    private static function create_customer_tables(): void
+    {
+        global $wpdb;
+
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        $charset_collate = $wpdb->get_charset_collate();
+        $customers_table = self::customers_table();
+        $messages_table = self::messages_table();
+
+        dbDelta("CREATE TABLE {$customers_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            conversation_id varchar(64) NOT NULL,
+            customer_name varchar(100) NOT NULL DEFAULT '',
+            contact varchar(120) NOT NULL DEFAULT '',
+            first_message text NULL,
+            last_message text NULL,
+            last_reply text NULL,
+            created_at datetime NOT NULL,
+            updated_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY conversation_id (conversation_id),
+            KEY updated_at (updated_at),
+            KEY contact (contact)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$messages_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            customer_id bigint(20) unsigned NOT NULL,
+            conversation_id varchar(64) NOT NULL,
+            role varchar(20) NOT NULL,
+            content longtext NOT NULL,
+            trace_id varchar(120) NOT NULL DEFAULT '',
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY customer_id (customer_id),
+            KEY conversation_id (conversation_id),
+            KEY created_at (created_at)
+        ) {$charset_collate};");
+    }
+
     public static function add_settings_page(): void
     {
         add_options_page(
@@ -44,6 +89,14 @@ final class LinkAI_AI_Customer_Service
             'manage_options',
             'linkai-ai-customer-service',
             [__CLASS__, 'render_settings_page']
+        );
+
+        add_management_page(
+            'LinkAI 客户记录',
+            'LinkAI 客户记录',
+            'manage_options',
+            'linkai-customer-records',
+            [__CLASS__, 'render_customer_records_page']
         );
     }
 
@@ -316,8 +369,14 @@ final class LinkAI_AI_Customer_Service
                 </header>
                 <div class="linkai-chat__messages" role="log" aria-live="polite"></div>
                 <form class="linkai-chat__form">
-                    <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
-                    <button class="linkai-chat__send" type="submit">发送</button>
+                    <div class="linkai-chat__customer-fields">
+                        <input class="linkai-chat__customer-input" name="customer_name" type="text" maxlength="50" placeholder="姓名（选填）" autocomplete="name">
+                        <input class="linkai-chat__customer-input" name="contact" type="text" maxlength="80" placeholder="电话/微信（选填）" autocomplete="tel">
+                    </div>
+                    <div class="linkai-chat__composer">
+                        <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
+                        <button class="linkai-chat__send" type="submit">发送</button>
+                    </div>
                 </form>
             </section>
         </div>
@@ -333,6 +392,7 @@ final class LinkAI_AI_Customer_Service
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(self::NONCE_ACTION),
             'errorMessage' => '抱歉，智能客服暂时无法连接，请稍后再试或留下联系方式。',
+            'conversationStorageKey' => 'linkai_customer_service_conversation_id',
         ]);
     }
 
@@ -347,6 +407,12 @@ final class LinkAI_AI_Customer_Service
 
         $message = isset($_POST['message']) ? sanitize_textarea_field(wp_unslash($_POST['message'])) : '';
         $history_json = isset($_POST['history']) ? wp_unslash($_POST['history']) : '[]';
+        $conversation_id = isset($_POST['conversation_id']) ? sanitize_key(wp_unslash($_POST['conversation_id'])) : '';
+        $customer_name = isset($_POST['customer_name']) ? sanitize_text_field(wp_unslash($_POST['customer_name'])) : '';
+        $contact = isset($_POST['contact']) ? sanitize_text_field(wp_unslash($_POST['contact'])) : '';
+        if ($conversation_id === '') {
+            $conversation_id = wp_generate_uuid4();
+        }
         if ($message === '') {
             wp_send_json_error(['message' => '请输入咨询内容。'], 400);
         }
@@ -410,11 +476,145 @@ final class LinkAI_AI_Customer_Service
             wp_send_json_error(['message' => 'LinkAI 未返回有效回复。'], 502);
         }
 
+        $trace_id = $data['trace_id'] ?? '';
+        self::record_customer_message($conversation_id, $customer_name, $contact, $message, $reply, (string) $trace_id);
+
         wp_send_json_success([
             'reply' => wp_kses_post($reply),
-            'trace_id' => $data['trace_id'] ?? '',
+            'conversation_id' => $conversation_id,
+            'trace_id' => $trace_id,
             'suggested_questions' => $data['suggested_questions'] ?? [],
         ]);
+    }
+
+    private static function record_customer_message(string $conversation_id, string $customer_name, string $contact, string $message, string $reply, string $trace_id): void
+    {
+        global $wpdb;
+        self::create_customer_tables();
+
+        $now = current_time('mysql');
+        $customers_table = self::customers_table();
+        $messages_table = self::messages_table();
+        $customer = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$customers_table} WHERE conversation_id = %s", $conversation_id));
+
+        if ($customer) {
+            $customer_id = (int) $customer->id;
+            $wpdb->update(
+                $customers_table,
+                [
+                    'customer_name' => $customer_name !== '' ? $customer_name : $customer->customer_name,
+                    'contact' => $contact !== '' ? $contact : $customer->contact,
+                    'last_message' => $message,
+                    'last_reply' => $reply,
+                    'updated_at' => $now,
+                ],
+                ['id' => $customer_id],
+                ['%s', '%s', '%s', '%s', '%s'],
+                ['%d']
+            );
+        } else {
+            $wpdb->insert(
+                $customers_table,
+                [
+                    'conversation_id' => $conversation_id,
+                    'customer_name' => $customer_name,
+                    'contact' => $contact,
+                    'first_message' => $message,
+                    'last_message' => $message,
+                    'last_reply' => $reply,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ],
+                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s']
+            );
+            $customer_id = (int) $wpdb->insert_id;
+        }
+
+        foreach ([['user', $message, ''], ['assistant', $reply, $trace_id]] as $item) {
+            $wpdb->insert(
+                $messages_table,
+                [
+                    'customer_id' => $customer_id,
+                    'conversation_id' => $conversation_id,
+                    'role' => $item[0],
+                    'content' => $item[1],
+                    'trace_id' => $item[2],
+                    'created_at' => $now,
+                ],
+                ['%d', '%s', '%s', '%s', '%s', '%s']
+            );
+        }
+    }
+
+    public static function render_customer_records_page(): void
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        global $wpdb;
+        self::create_customer_tables();
+        $customers_table = self::customers_table();
+        $messages_table = self::messages_table();
+        $conversation_id = isset($_GET['conversation_id']) ? sanitize_key(wp_unslash($_GET['conversation_id'])) : '';
+        $customers = $wpdb->get_results("SELECT * FROM {$customers_table} ORDER BY updated_at DESC LIMIT 100");
+        $selected = null;
+        $messages = [];
+        if ($conversation_id !== '') {
+            $selected = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$customers_table} WHERE conversation_id = %s", $conversation_id));
+            $messages = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$messages_table} WHERE conversation_id = %s ORDER BY created_at ASC", $conversation_id));
+        }
+        ?>
+        <div class="wrap">
+            <h1>LinkAI 客户记录</h1>
+            <p>这里会保存访客在智能客服中留下的姓名、电话/微信，以及完整聊天记录，方便后续人工跟进。</p>
+            <div style="display:grid;grid-template-columns:minmax(360px, 1fr) 1.2fr;gap:24px;align-items:start;">
+                <table class="widefat striped">
+                    <thead><tr><th>客户</th><th>联系方式</th><th>最后咨询</th><th>更新时间</th></tr></thead>
+                    <tbody>
+                    <?php if (empty($customers)) : ?>
+                        <tr><td colspan="4">暂无客户记录。</td></tr>
+                    <?php endif; ?>
+                    <?php foreach ($customers as $customer) : ?>
+                        <tr>
+                            <td><a href="<?php echo esc_url(add_query_arg(['page' => 'linkai-customer-records', 'conversation_id' => $customer->conversation_id], admin_url('tools.php'))); ?>"><?php echo esc_html($customer->customer_name ?: '未留姓名'); ?></a></td>
+                            <td><?php echo esc_html($customer->contact ?: '未留联系方式'); ?></td>
+                            <td><?php echo esc_html(wp_trim_words($customer->last_message, 18)); ?></td>
+                            <td><?php echo esc_html($customer->updated_at); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <div class="postbox" style="padding:16px;">
+                    <?php if ($selected) : ?>
+                        <h2><?php echo esc_html($selected->customer_name ?: '未留姓名'); ?></h2>
+                        <p><strong>联系方式：</strong><?php echo esc_html($selected->contact ?: '未留联系方式'); ?></p>
+                        <p><strong>会话 ID：</strong><code><?php echo esc_html($selected->conversation_id); ?></code></p>
+                        <hr>
+                        <?php foreach ($messages as $chat_message) : ?>
+                            <p><strong><?php echo $chat_message->role === 'user' ? '客户' : 'AI客服'; ?>：</strong><?php echo nl2br(esc_html($chat_message->content)); ?></p>
+                        <?php endforeach; ?>
+                    <?php else : ?>
+                        <p>点击左侧客户可以查看完整聊天记录。</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
+    private static function customers_table(): string
+    {
+        global $wpdb;
+
+        return $wpdb->prefix . 'linkai_customers';
+    }
+
+    private static function messages_table(): string
+    {
+        global $wpdb;
+
+        return $wpdb->prefix . 'linkai_chat_messages';
     }
 
     public static function render_settings_page(): void
@@ -516,4 +716,5 @@ final class LinkAI_AI_Customer_Service
     }
 }
 
+register_activation_hook(__FILE__, ['LinkAI_AI_Customer_Service', 'activate']);
 LinkAI_AI_Customer_Service::init();

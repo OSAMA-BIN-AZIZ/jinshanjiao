@@ -17,7 +17,10 @@
         const form = widget.querySelector('.linkai-chat__form');
         const input = widget.querySelector('.linkai-chat__input');
         const send = widget.querySelector('.linkai-chat__send');
+        const customerName = widget.querySelector('[name="customer_name"]');
+        const contact = widget.querySelector('[name="contact"]');
         const history = [];
+        let conversationId = window.localStorage ? window.localStorage.getItem(LinkAICustomerService.conversationStorageKey) || '' : '';
 
         function scrollToBottom() {
             messages.scrollTop = messages.scrollHeight;
@@ -65,6 +68,8 @@
             input.value = '';
             input.disabled = true;
             send.disabled = true;
+            customerName.disabled = true;
+            contact.disabled = true;
 
             const loading = createMessage('assistant', '正在思考，请稍候…', 'linkai-chat__message--loading');
             messages.appendChild(loading);
@@ -75,6 +80,9 @@
             formData.append('nonce', LinkAICustomerService.nonce);
             formData.append('message', question);
             formData.append('history', JSON.stringify(history.slice(0, -1)));
+            formData.append('conversation_id', conversationId);
+            formData.append('customer_name', customerName.value.trim());
+            formData.append('contact', contact.value.trim());
 
             try {
                 const response = await fetch(LinkAICustomerService.ajaxUrl, {
@@ -89,6 +97,12 @@
                     throw new Error(payload.data && payload.data.message ? payload.data.message : LinkAICustomerService.errorMessage);
                 }
 
+                if (payload.data.conversation_id) {
+                    conversationId = payload.data.conversation_id;
+                    if (window.localStorage) {
+                        window.localStorage.setItem(LinkAICustomerService.conversationStorageKey, conversationId);
+                    }
+                }
                 addMessage('assistant', payload.data.reply);
                 history.push({ role: 'assistant', content: payload.data.reply });
             } catch (error) {
@@ -97,6 +111,8 @@
             } finally {
                 input.disabled = false;
                 send.disabled = false;
+                customerName.disabled = false;
+                contact.disabled = false;
                 input.focus();
             }
         });
