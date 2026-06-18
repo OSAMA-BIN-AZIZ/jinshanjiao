@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,8 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.0.0';
+    private const VERSION = '1.1.0';
+    private const PLUGIN_FILE = __FILE__;
 
     public static function init(): void
     {
@@ -30,6 +31,9 @@ final class LinkAI_AI_Customer_Service
         add_action('wp_ajax_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [__CLASS__, 'add_settings_link']);
+        add_filter('pre_set_site_transient_update_plugins', [__CLASS__, 'check_for_plugin_update']);
+        add_filter('plugins_api', [__CLASS__, 'render_plugin_update_info'], 20, 3);
+        add_filter('upgrader_source_selection', [__CLASS__, 'rename_github_update_source'], 10, 4);
     }
 
     public static function add_settings_page(): void
@@ -106,7 +110,160 @@ final class LinkAI_AI_Customer_Service
             'welcome_message' => isset($input['welcome_message']) ? sanitize_textarea_field($input['welcome_message']) : $defaults['welcome_message'],
             'system_prompt' => isset($input['system_prompt']) ? sanitize_textarea_field($input['system_prompt']) : $defaults['system_prompt'],
             'auto_render' => !empty($input['auto_render']) ? '1' : '0',
+            'update_repo_url' => isset($input['update_repo_url']) ? esc_url_raw(trim($input['update_repo_url'])) : $defaults['update_repo_url'],
+            'update_branch' => isset($input['update_branch']) ? self::sanitize_update_branch($input['update_branch']) : $defaults['update_branch'],
         ];
+    }
+
+    public static function check_for_plugin_update($transient)
+    {
+        if (!is_object($transient)) {
+            return $transient;
+        }
+
+        $update = self::get_github_update_data();
+        if (!$update || !version_compare($update['version'], self::VERSION, '>')) {
+            return $transient;
+        }
+
+        $plugin_basename = plugin_basename(self::PLUGIN_FILE);
+        $transient->response[$plugin_basename] = (object) [
+            'slug' => dirname($plugin_basename),
+            'plugin' => $plugin_basename,
+            'new_version' => $update['version'],
+            'url' => $update['repo_url'],
+            'package' => $update['zip_url'],
+            'tested' => get_bloginfo('version'),
+            'requires' => '5.8',
+        ];
+
+        return $transient;
+    }
+
+    public static function render_plugin_update_info($result, string $action, object $args)
+    {
+        $plugin_slug = dirname(plugin_basename(self::PLUGIN_FILE));
+        if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== $plugin_slug) {
+            return $result;
+        }
+
+        $update = self::get_github_update_data();
+        if (!$update) {
+            return $result;
+        }
+
+        return (object) [
+            'name' => 'LinkAI 智能 AI 客服',
+            'slug' => $plugin_slug,
+            'version' => $update['version'],
+            'author' => 'Jinshanjiao',
+            'homepage' => $update['repo_url'],
+            'download_link' => $update['zip_url'],
+            'requires' => '5.8',
+            'tested' => get_bloginfo('version'),
+            'sections' => [
+                'description' => '从 GitHub 仓库分支下载并更新 LinkAI 智能 AI 客服插件。',
+                'changelog' => !empty($update['changelog']) ? nl2br(esc_html($update['changelog'])) : '请查看 GitHub 仓库提交记录。',
+            ],
+        ];
+    }
+
+    public static function rename_github_update_source($source, $remote_source, $upgrader, $hook_extra)
+    {
+        if (empty($hook_extra['plugin']) || $hook_extra['plugin'] !== plugin_basename(self::PLUGIN_FILE)) {
+            return $source;
+        }
+
+        global $wp_filesystem;
+        if (!$wp_filesystem) {
+            return $source;
+        }
+
+        $target = trailingslashit($remote_source) . dirname(plugin_basename(self::PLUGIN_FILE));
+        if ($source !== $target && $wp_filesystem->exists($source)) {
+            if ($wp_filesystem->exists($target)) {
+                $wp_filesystem->delete($target, true);
+            }
+            if ($wp_filesystem->move($source, $target, true)) {
+                return $target;
+            }
+        }
+
+        return $source;
+    }
+
+    private static function get_github_update_data(): ?array
+    {
+        $options = self::get_options();
+        $repo = self::parse_github_repo($options['update_repo_url']);
+        $branch = !empty($options['update_branch']) ? $options['update_branch'] : 'main';
+        if (!$repo) {
+            return null;
+        }
+
+        $cache_key = 'linkai_ai_customer_service_update_' . md5($repo['owner'] . '/' . $repo['name'] . '/' . $branch);
+        $cached = get_site_transient($cache_key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $plugin_file_url = sprintf(
+            'https://raw.githubusercontent.com/%s/%s/%s/linkai-ai-customer-service.php',
+            rawurlencode($repo['owner']),
+            rawurlencode($repo['name']),
+            rawurlencode($branch)
+        );
+        $response = wp_remote_get($plugin_file_url, ['timeout' => 15]);
+        if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
+        }
+
+        $remote_plugin = wp_remote_retrieve_body($response);
+        if (!preg_match('/^[ \t\/*#@]*Version:\s*([0-9A-Za-z.\-_]+)/mi', $remote_plugin, $matches)) {
+            return null;
+        }
+
+        $data = [
+            'version' => $matches[1],
+            'repo_url' => sprintf('https://github.com/%s/%s', $repo['owner'], $repo['name']),
+            'zip_url' => sprintf('https://github.com/%s/%s/archive/refs/heads/%s.zip', $repo['owner'], $repo['name'], rawurlencode($branch)),
+            'changelog' => self::extract_remote_changelog($remote_plugin),
+        ];
+        set_site_transient($cache_key, $data, 15 * MINUTE_IN_SECONDS);
+
+        return $data;
+    }
+
+    private static function sanitize_update_branch(string $branch): string
+    {
+        $branch = preg_replace('/[^A-Za-z0-9._\/-]/', '', trim($branch));
+
+        return $branch !== '' ? $branch : 'main';
+    }
+
+    private static function parse_github_repo(string $repo_url): ?array
+    {
+        if ($repo_url === '') {
+            return null;
+        }
+
+        if (preg_match('#github\.com[:/]([^/]+)/([^/.]+)(?:\.git)?/?#i', $repo_url, $matches)) {
+            return [
+                'owner' => sanitize_key($matches[1]),
+                'name' => sanitize_key($matches[2]),
+            ];
+        }
+
+        return null;
+    }
+
+    private static function extract_remote_changelog(string $remote_plugin): string
+    {
+        if (preg_match('/^[ \t\/*#@]*Version:\s*([^\n]+)$/mi', $remote_plugin, $matches)) {
+            return '远程版本：' . trim($matches[1]);
+        }
+
+        return '';
     }
 
     public static function register_assets(): void
@@ -317,6 +474,14 @@ final class LinkAI_AI_Customer_Service
                         <th scope="row">显示方式</th>
                         <td><label><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[auto_render]" type="checkbox" value="1" <?php checked($options['auto_render'], '1'); ?> /> 在全站右下角自动显示</label><p class="description">也可以关闭自动显示，使用短代码 <code>[linkai_customer_service]</code> 放到指定页面。</p></td>
                     </tr>
+                    <tr>
+                        <th scope="row"><label for="linkai-update-repo-url">GitHub 更新仓库</label></th>
+                        <td><input id="linkai-update-repo-url" name="<?php echo esc_attr(self::OPTION_NAME); ?>[update_repo_url]" type="url" class="regular-text" placeholder="https://github.com/OSAMA-BIN-AZIZ/jinshanjiao" value="<?php echo esc_attr($options['update_repo_url']); ?>" /><p class="description">可选。填写插件所在 GitHub 仓库后，WordPress 后台「插件」页面可以检测并一键更新。</p></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="linkai-update-branch">更新分支</label></th>
+                        <td><input id="linkai-update-branch" name="<?php echo esc_attr(self::OPTION_NAME); ?>[update_branch]" type="text" class="regular-text" value="<?php echo esc_attr($options['update_branch']); ?>" /><p class="description">默认 main。你在 GitHub 更新代码并提高插件 Version 后，WordPress 会从此分支下载 zip 包更新。</p></td>
+                    </tr>
                 </table>
                 <?php submit_button('保存设置'); ?>
             </form>
@@ -326,7 +491,12 @@ final class LinkAI_AI_Customer_Service
 
     private static function get_options(): array
     {
-        return wp_parse_args(get_option(self::OPTION_NAME, []), self::default_options());
+        $options = wp_parse_args(get_option(self::OPTION_NAME, []), self::default_options());
+        if (empty($options['update_repo_url'])) {
+            $options['update_repo_url'] = self::default_options()['update_repo_url'];
+        }
+
+        return $options;
     }
 
     private static function default_options(): array
@@ -340,6 +510,8 @@ final class LinkAI_AI_Customer_Service
             'welcome_message' => '您好，我是金三角智能客服。您可以咨询汽车配件型号、适配车型、库存、报价和售后问题。',
             'system_prompt' => '你是金三角汽车配件网站的智能客服。请使用中文，回答要专业、简洁、友好。优先帮助用户确认配件名称、车型、年份、发动机型号、采购数量和联系方式；不确定时不要编造库存或价格，应引导用户留下联系方式，由人工客服确认。',
             'auto_render' => '1',
+            'update_repo_url' => 'https://github.com/OSAMA-BIN-AZIZ/jinshanjiao',
+            'update_branch' => 'main',
         ];
     }
 }
