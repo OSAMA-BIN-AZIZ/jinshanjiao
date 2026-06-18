@@ -22,12 +22,14 @@ final class LinkAI_AI_Customer_Service
     public static function init(): void
     {
         add_action('admin_menu', [__CLASS__, 'add_settings_page']);
+        add_action('admin_notices', [__CLASS__, 'render_missing_key_notice']);
         add_action('admin_init', [__CLASS__, 'register_settings']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
         add_action('wp_footer', [__CLASS__, 'render_chat_widget']);
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
         add_action('wp_ajax_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), [__CLASS__, 'add_settings_link']);
     }
 
     public static function add_settings_page(): void
@@ -38,6 +40,39 @@ final class LinkAI_AI_Customer_Service
             'manage_options',
             'linkai-ai-customer-service',
             [__CLASS__, 'render_settings_page']
+        );
+    }
+
+    public static function add_settings_link(array $links): array
+    {
+        $settings_link = sprintf(
+            '<a href="%s">%s</a>',
+            esc_url(admin_url('options-general.php?page=linkai-ai-customer-service')),
+            esc_html__('设置 API Key', 'linkai-ai-customer-service')
+        );
+        array_unshift($links, $settings_link);
+
+        return $links;
+    }
+
+    public static function render_missing_key_notice(): void
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        $is_settings_page = $screen && $screen->id === 'settings_page_linkai-ai-customer-service';
+        $options = self::get_options();
+        if (!empty($options['api_key']) || $is_settings_page) {
+            return;
+        }
+
+        printf(
+            '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+            esc_html__('LinkAI 智能客服需要先配置 API Key 才能回复访客消息。', 'linkai-ai-customer-service'),
+            esc_url(admin_url('options-general.php?page=linkai-ai-customer-service')),
+            esc_html__('现在去设置', 'linkai-ai-customer-service')
         );
     }
 
@@ -53,9 +88,17 @@ final class LinkAI_AI_Customer_Service
     public static function sanitize_options(array $input): array
     {
         $defaults = self::default_options();
+        $current = self::get_options();
+        $api_key = isset($input['api_key']) ? trim(sanitize_text_field($input['api_key'])) : '';
+
+        if (!empty($input['clear_api_key'])) {
+            $api_key = '';
+        } elseif ($api_key === '') {
+            $api_key = $current['api_key'];
+        }
 
         return [
-            'api_key' => isset($input['api_key']) ? sanitize_text_field($input['api_key']) : $defaults['api_key'],
+            'api_key' => $api_key,
             'app_code' => isset($input['app_code']) ? sanitize_text_field($input['app_code']) : $defaults['app_code'],
             'model' => isset($input['model']) ? sanitize_text_field($input['model']) : $defaults['model'],
             'temperature' => isset($input['temperature']) ? min(1, max(0, (float) $input['temperature'])) : $defaults['temperature'],
@@ -228,12 +271,23 @@ final class LinkAI_AI_Customer_Service
         <div class="wrap">
             <h1>LinkAI 智能客服</h1>
             <p>使用 LinkAI 通用对话接口为网站访客提供汽车配件咨询、售前问答和售后引导。API Key 仅保存在 WordPress 后台，前端通过 AJAX 代理调用。</p>
+            <?php if (empty($options['api_key'])) : ?>
+                <div class="notice notice-warning inline"><p>请先填写 LinkAI API Key，否则前台智能客服无法调用 AI 回复。</p></div>
+            <?php else : ?>
+                <div class="notice notice-success inline"><p>API Key 已保存。为了安全，输入框不会回显完整密钥；如需更换，请直接输入新的 API Key 并保存。</p></div>
+            <?php endif; ?>
             <form method="post" action="options.php">
                 <?php settings_fields('linkai_ai_customer_service'); ?>
                 <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row"><label for="linkai-api-key">API Key</label></th>
-                        <td><input id="linkai-api-key" name="<?php echo esc_attr(self::OPTION_NAME); ?>[api_key]" type="password" class="regular-text" value="<?php echo esc_attr($options['api_key']); ?>" autocomplete="off" /></td>
+                        <td>
+                            <input id="linkai-api-key" name="<?php echo esc_attr(self::OPTION_NAME); ?>[api_key]" type="password" class="regular-text" value="" autocomplete="new-password" placeholder="<?php echo empty($options['api_key']) ? esc_attr('请输入 LinkAI API Key') : esc_attr('已保存，留空则不修改'); ?>" />
+                            <p class="description">API Key 只保存在 WordPress 数据库中，不会输出到前端页面。留空保存时会保留当前已保存的 API Key。</p>
+                            <?php if (!empty($options['api_key'])) : ?>
+                                <label><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[clear_api_key]" type="checkbox" value="1" /> 清除已保存的 API Key</label>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="linkai-app-code">应用 Code</label></th>
