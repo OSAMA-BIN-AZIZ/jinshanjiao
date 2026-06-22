@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.0';
+    private const VERSION = '1.3.1';
     private const PLUGIN_FILE = __FILE__;
 
     public static function init(): void
@@ -25,6 +25,7 @@ final class LinkAI_AI_Customer_Service
         add_action('admin_menu', [__CLASS__, 'add_settings_page']);
         add_action('admin_notices', [__CLASS__, 'render_missing_key_notice']);
         add_action('admin_init', [__CLASS__, 'register_settings']);
+        add_action('admin_init', [__CLASS__, 'handle_update_cache_clear']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
         add_action('wp_footer', [__CLASS__, 'render_chat_widget']);
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
@@ -171,6 +172,38 @@ final class LinkAI_AI_Customer_Service
         ];
     }
 
+
+    public static function handle_update_cache_clear(): void
+    {
+        if (!current_user_can('manage_options') || empty($_POST['linkai_clear_update_cache'])) {
+            return;
+        }
+
+        check_admin_referer('linkai_clear_update_cache');
+        self::delete_update_cache();
+        delete_site_transient('update_plugins');
+
+        wp_safe_redirect(add_query_arg(['page' => 'linkai-ai-customer-service', 'update_cache_cleared' => '1'], admin_url('options-general.php')));
+        exit;
+    }
+
+    private static function delete_update_cache(): void
+    {
+        $options = self::get_options();
+        $repo = self::parse_github_repo($options['update_repo_url']);
+        if (!$repo) {
+            return;
+        }
+
+        $branch = !empty($options['update_branch']) ? $options['update_branch'] : 'main';
+        delete_site_transient(self::get_update_cache_key($repo, $branch));
+    }
+
+    private static function get_update_cache_key(array $repo, string $branch): string
+    {
+        return 'linkai_ai_customer_service_update_' . md5($repo['owner'] . '/' . $repo['name'] . '/' . $branch);
+    }
+
     public static function check_for_plugin_update($transient)
     {
         if (!is_object($transient)) {
@@ -298,7 +331,7 @@ final class LinkAI_AI_Customer_Service
             return null;
         }
 
-        $cache_key = 'linkai_ai_customer_service_update_' . md5($repo['owner'] . '/' . $repo['name'] . '/' . $branch);
+        $cache_key = self::get_update_cache_key($repo, $branch);
         $cached = get_site_transient($cache_key);
         if (is_array($cached)) {
             return $cached;
@@ -789,7 +822,44 @@ final class LinkAI_AI_Customer_Service
                 </table>
                 <?php submit_button('保存设置'); ?>
             </form>
+
+            <hr>
+            <h2>更新排查</h2>
+            <?php if (isset($_GET['update_cache_cleared'])) : ?>
+                <div class="notice notice-success inline"><p>更新缓存已清除。请回到「插件」页面重新检查更新。</p></div>
+            <?php endif; ?>
+            <p>如果仍提示「更新失败：文件系统错误」，通常是手动上传插件后目录/文件归属或权限与 WordPress 运行用户不一致。可先清除缓存，再检查下方权限状态。</p>
+            <form method="post">
+                <?php wp_nonce_field('linkai_clear_update_cache'); ?>
+                <?php submit_button('清除更新缓存', 'secondary', 'linkai_clear_update_cache', false); ?>
+            </form>
+            <?php self::render_update_diagnostics(); ?>
         </div>
+        <?php
+    }
+
+
+    private static function render_update_diagnostics(): void
+    {
+        $plugin_dir = dirname(self::PLUGIN_FILE);
+        $diagnostics = [
+            '当前插件目录' => $plugin_dir,
+            '插件目录是否可写' => is_writable($plugin_dir) ? '是' : '否：请把 wp-content/plugins/' . basename($plugin_dir) . ' 的所有者/权限调整为 WordPress 可写',
+            'wp-content/plugins 是否可写' => is_writable(WP_PLUGIN_DIR) ? '是' : '否：WordPress 无法替换插件目录',
+            'WordPress 文件系统方式' => function_exists('get_filesystem_method') ? get_filesystem_method([], WP_PLUGIN_DIR) : '未知',
+            '当前插件路径' => plugin_basename(self::PLUGIN_FILE),
+        ];
+        ?>
+        <table class="widefat striped" style="max-width: 900px; margin-top: 12px;">
+            <tbody>
+            <?php foreach ($diagnostics as $label => $value) : ?>
+                <tr>
+                    <th scope="row" style="width: 220px;"><?php echo esc_html($label); ?></th>
+                    <td><code><?php echo esc_html($value); ?></code></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
         <?php
     }
 
