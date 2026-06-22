@@ -8,7 +8,7 @@ A suitable car parts website for deployment on WordPress.
 
 ### 功能
 
-- 全站右下角悬浮智能客服窗口。
+- 全站右下角悬浮智能客服窗口，自动显示会同时兼容 `wp_body_open` 和 `wp_footer`。
 - 支持短代码 `[linkai_customer_service]` 嵌入指定页面。
 - WordPress 后台可配置 LinkAI API Key，支持已保存密钥提示、留空保留、重新填写替换和清除密钥。
 - 后台配置应用 Code、模型、温度、欢迎语、系统提示词，以及 GitHub 更新仓库和分支。

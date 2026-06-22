@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.8
+ * Version: 1.3.9
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,9 +17,10 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.8';
+    private const VERSION = '1.3.9';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
+    private static bool $auto_widget_rendered = false;
 
     public static function init(): void
     {
@@ -29,7 +30,8 @@ final class LinkAI_AI_Customer_Service
         add_action('admin_init', [__CLASS__, 'handle_update_cache_clear']);
         add_action('admin_init', [__CLASS__, 'handle_permission_fix']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
-        add_action('wp_footer', [__CLASS__, 'render_chat_widget']);
+        add_action('wp_body_open', [__CLASS__, 'render_chat_widget'], 99);
+        add_action('wp_footer', [__CLASS__, 'render_chat_widget'], 99);
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
         add_action('wp_ajax_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
@@ -511,15 +513,20 @@ final class LinkAI_AI_Customer_Service
             self::VERSION,
             true
         );
+
+        if (self::get_options()['auto_render'] === '1') {
+            self::enqueue_widget_assets();
+        }
     }
 
     public static function render_chat_widget(): void
     {
         $options = self::get_options();
-        if ($options['auto_render'] !== '1') {
+        if ($options['auto_render'] !== '1' || self::$auto_widget_rendered) {
             return;
         }
 
+        self::$auto_widget_rendered = true;
         echo self::render_shortcode();
     }
 
