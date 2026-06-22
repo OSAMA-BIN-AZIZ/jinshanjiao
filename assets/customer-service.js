@@ -9,6 +9,45 @@
         return message;
     }
 
+
+    function createWidgetFromConfig() {
+        if (!window.LinkAICustomerService || !LinkAICustomerService.autoRender || document.querySelector('.linkai-chat')) {
+            return null;
+        }
+
+        const widget = document.createElement('div');
+        widget.className = 'linkai-chat';
+        widget.dataset.welcome = LinkAICustomerService.welcomeMessage || '您好，请问有什么可以帮您？';
+        widget.innerHTML = `
+            <button class="linkai-chat__toggle" type="button" aria-label="打开智能客服">
+                <span class="linkai-chat__toggle-icon">AI</span>
+                <span class="linkai-chat__toggle-text">在线客服</span>
+            </button>
+            <section class="linkai-chat__panel" aria-label="智能客服聊天窗口" hidden>
+                <header class="linkai-chat__header">
+                    <div>
+                        <strong></strong>
+                        <span>通常几秒内回复</span>
+                    </div>
+                    <button class="linkai-chat__close" type="button" aria-label="关闭智能客服">×</button>
+                </header>
+                <div class="linkai-chat__messages" role="log" aria-live="polite"></div>
+                <form class="linkai-chat__form">
+                    <div class="linkai-chat__customer-fields">
+                        <input class="linkai-chat__customer-input" name="customer_name" type="text" maxlength="50" placeholder="姓名（选填）" autocomplete="name">
+                        <input class="linkai-chat__customer-input" name="contact" type="text" maxlength="80" placeholder="电话/微信（选填）" autocomplete="tel">
+                    </div>
+                    <div class="linkai-chat__composer">
+                        <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
+                        <button class="linkai-chat__send" type="submit">发送</button>
+                    </div>
+                </form>
+            </section>`;
+        widget.querySelector('.linkai-chat__header strong').textContent = LinkAICustomerService.assistantName || '智能客服';
+        document.body.appendChild(widget);
+        return widget;
+    }
+
     function initChat(widget) {
         const toggle = widget.querySelector('.linkai-chat__toggle');
         const panel = widget.querySelector('.linkai-chat__panel');
@@ -119,6 +158,12 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        const fallbackWidget = createWidgetFromConfig();
+        if (fallbackWidget) {
+            initChat(fallbackWidget);
+            return;
+        }
+
         document.querySelectorAll('.linkai-chat').forEach(initChat);
     });
 }());
