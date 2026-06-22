@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.4
+ * Version: 1.3.7
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,8 +17,9 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.4';
+    private const VERSION = '1.3.7';
     private const PLUGIN_FILE = __FILE__;
+    private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
 
     public static function init(): void
     {
@@ -57,6 +58,10 @@ final class LinkAI_AI_Customer_Service
             conversation_id varchar(64) NOT NULL,
             customer_name varchar(100) NOT NULL DEFAULT '',
             contact varchar(120) NOT NULL DEFAULT '',
+            ip_address varchar(45) NOT NULL DEFAULT '',
+            country varchar(80) NOT NULL DEFAULT '',
+            device varchar(30) NOT NULL DEFAULT '',
+            user_agent text NULL,
             first_message text NULL,
             last_message text NULL,
             last_reply text NULL,
@@ -68,6 +73,7 @@ final class LinkAI_AI_Customer_Service
             UNIQUE KEY conversation_id (conversation_id),
             KEY updated_at (updated_at),
             KEY status (status),
+            KEY ip_address (ip_address),
             KEY contact (contact)
         ) {$charset_collate};");
 
@@ -289,7 +295,7 @@ final class LinkAI_AI_Customer_Service
 
         $plugin_basename = plugin_basename(self::PLUGIN_FILE);
         $transient->response[$plugin_basename] = (object) [
-            'slug' => dirname($plugin_basename),
+            'slug' => self::PLUGIN_DIRECTORY_NAME,
             'plugin' => $plugin_basename,
             'new_version' => $update['version'],
             'url' => $update['repo_url'],
@@ -303,7 +309,7 @@ final class LinkAI_AI_Customer_Service
 
     public static function render_plugin_update_info($result, string $action, object $args)
     {
-        $plugin_slug = dirname(plugin_basename(self::PLUGIN_FILE));
+        $plugin_slug = self::PLUGIN_DIRECTORY_NAME;
         if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== $plugin_slug) {
             return $result;
         }
@@ -340,8 +346,7 @@ final class LinkAI_AI_Customer_Service
             return $source;
         }
 
-        $installed_dir = dirname(plugin_basename(self::PLUGIN_FILE));
-        $target = trailingslashit($remote_source) . $installed_dir;
+        $target = trailingslashit($remote_source) . self::PLUGIN_DIRECTORY_NAME;
         $plugin_file = basename(self::PLUGIN_FILE);
         $source = untrailingslashit($source);
         $target = untrailingslashit($target);
@@ -428,12 +433,23 @@ final class LinkAI_AI_Customer_Service
         $data = [
             'version' => $matches[1],
             'repo_url' => sprintf('https://github.com/%s/%s', $repo['owner'], $repo['name']),
-            'zip_url' => sprintf('https://github.com/%s/%s/archive/refs/heads/%s.zip', $repo['owner'], $repo['name'], rawurlencode($branch)),
+            'zip_url' => self::github_branch_zip_url($repo, $branch),
             'changelog' => self::extract_remote_changelog($remote_plugin),
         ];
         set_site_transient($cache_key, $data, 15 * MINUTE_IN_SECONDS);
 
         return $data;
+    }
+
+
+    private static function github_branch_zip_url(array $repo, string $branch): string
+    {
+        return sprintf(
+            'https://codeload.github.com/%s/%s/zip/refs/heads/%s',
+            rawurlencode($repo['owner']),
+            rawurlencode($repo['name']),
+            str_replace('%2F', '/', rawurlencode($branch))
+        );
     }
 
     private static function sanitize_update_branch(string $branch): string
@@ -653,12 +669,16 @@ final class LinkAI_AI_Customer_Service
                 [
                     'customer_name' => $customer_name !== '' ? $customer_name : $customer->customer_name,
                     'contact' => $contact !== '' ? $contact : $customer->contact,
+                    'ip_address' => self::get_customer_ip(),
+                    'country' => self::get_customer_country(),
+                    'device' => self::get_customer_device(),
+                    'user_agent' => self::get_customer_user_agent(),
                     'last_message' => $message,
                     'last_reply' => $reply,
                     'updated_at' => $now,
                 ],
                 ['id' => $customer_id],
-                ['%s', '%s', '%s', '%s', '%s'],
+                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'],
                 ['%d']
             );
         } else {
@@ -668,13 +688,17 @@ final class LinkAI_AI_Customer_Service
                     'conversation_id' => $conversation_id,
                     'customer_name' => $customer_name,
                     'contact' => $contact,
+                    'ip_address' => self::get_customer_ip(),
+                    'country' => self::get_customer_country(),
+                    'device' => self::get_customer_device(),
+                    'user_agent' => self::get_customer_user_agent(),
                     'first_message' => $message,
                     'last_message' => $message,
                     'last_reply' => $reply,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ],
-                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s']
+                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s']
             );
             $customer_id = (int) $wpdb->insert_id;
         }
@@ -744,15 +768,17 @@ final class LinkAI_AI_Customer_Service
             <?php endif; ?>
             <div style="display:grid;grid-template-columns:minmax(360px, 1fr) 1.2fr;gap:24px;align-items:start;">
                 <table class="widefat striped">
-                    <thead><tr><th>客户</th><th>联系方式</th><th>状态</th><th>最后咨询</th><th>更新时间</th></tr></thead>
+                    <thead><tr><th>客户</th><th>联系方式</th><th>IP/国家</th><th>设备</th><th>状态</th><th>最后咨询</th><th>更新时间</th></tr></thead>
                     <tbody>
                     <?php if (empty($customers)) : ?>
-                        <tr><td colspan="5">暂无客户记录。</td></tr>
+                        <tr><td colspan="7">暂无客户记录。</td></tr>
                     <?php endif; ?>
                     <?php foreach ($customers as $customer) : ?>
                         <tr>
                             <td><a href="<?php echo esc_url(add_query_arg(['conversation_id' => $customer->conversation_id], self::customer_records_page_url())); ?>"><?php echo esc_html($customer->customer_name ?: '未留姓名'); ?></a></td>
                             <td><?php echo esc_html($customer->contact ?: '未留联系方式'); ?></td>
+                            <td><?php echo esc_html(trim(($customer->ip_address ?? '') . ' ' . ($customer->country ?? '')) ?: '未知'); ?></td>
+                            <td><?php echo esc_html($customer->device ?: '未知'); ?></td>
                             <td><?php echo esc_html(self::customer_status_label($customer->status ?? 'new')); ?></td>
                             <td><?php echo esc_html(wp_trim_words($customer->last_message, 18)); ?></td>
                             <td><?php echo esc_html($customer->updated_at); ?></td>
@@ -772,6 +798,9 @@ final class LinkAI_AI_Customer_Service
                             <p><label><strong>客户备注：</strong><br><textarea name="notes" class="large-text" rows="4"><?php echo esc_textarea($selected->notes ?? ''); ?></textarea></label></p>
                             <?php submit_button('保存客户资料', 'primary', 'submit', false); ?>
                         </form>
+                        <p><strong>IP/国家：</strong><?php echo esc_html(trim(($selected->ip_address ?? '') . ' ' . ($selected->country ?? '')) ?: '未知'); ?></p>
+                        <p><strong>设备：</strong><?php echo esc_html($selected->device ?: '未知'); ?></p>
+                        <p><strong>User Agent：</strong><code><?php echo esc_html($selected->user_agent ?: '未知'); ?></code></p>
                         <p><strong>会话 ID：</strong><code><?php echo esc_html($selected->conversation_id); ?></code></p>
                         <hr>
                         <?php foreach ($messages as $chat_message) : ?>
@@ -786,6 +815,68 @@ final class LinkAI_AI_Customer_Service
         <?php
     }
 
+
+
+    private static function get_customer_ip(): string
+    {
+        foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'] as $key) {
+            if (empty($_SERVER[$key])) {
+                continue;
+            }
+
+            $ip = sanitize_text_field(wp_unslash($_SERVER[$key]));
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $forwarded_for = sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR']));
+            $ips = array_map('trim', explode(',', $forwarded_for));
+            foreach ($ips as $ip) {
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private static function get_customer_country(): string
+    {
+        foreach (['HTTP_CF_IPCOUNTRY', 'HTTP_X_APPENGINE_COUNTRY', 'GEOIP_COUNTRY_NAME'] as $key) {
+            if (!empty($_SERVER[$key])) {
+                return sanitize_text_field(wp_unslash($_SERVER[$key]));
+            }
+        }
+
+        return '';
+    }
+
+    private static function get_customer_user_agent(): string
+    {
+        return !empty($_SERVER['HTTP_USER_AGENT']) ? sanitize_textarea_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : '';
+    }
+
+    private static function get_customer_device(): string
+    {
+        $user_agent = strtolower(self::get_customer_user_agent());
+        if ($user_agent === '') {
+            return '';
+        }
+        if (strpos($user_agent, 'bot') !== false || strpos($user_agent, 'spider') !== false || strpos($user_agent, 'crawler') !== false) {
+            return '机器人';
+        }
+        if (strpos($user_agent, 'ipad') !== false || strpos($user_agent, 'tablet') !== false) {
+            return '平板';
+        }
+        if (strpos($user_agent, 'mobile') !== false || strpos($user_agent, 'iphone') !== false || strpos($user_agent, 'android') !== false) {
+            return '手机';
+        }
+
+        return '电脑';
+    }
 
     private static function customer_statuses(): array
     {
@@ -907,7 +998,7 @@ final class LinkAI_AI_Customer_Service
                     <div class="notice notice-error inline"><p>无法自动修复插件目录权限。通常表示 PHP/WordPress 用户不是该目录所有者，需要通过主机面板、FTP 或 SSH 修改所有者/权限。</p></div>
                 <?php endif; ?>
             <?php endif; ?>
-            <p>如果后台检测不到更新，请先看下方“当前插件版本”和“GitHub 远程版本”：只有远程 Version 高于当前 Version 时，WordPress 才会显示更新。若版本已高但仍不显示，可先清除更新缓存；若提示「更新失败：文件系统错误」，再检查权限状态或点击“尝试修复插件权限”。</p>
+            <p>如果后台检测不到更新，请先看下方“当前插件版本”和“GitHub 远程版本”：只有远程 Version 高于当前 Version 时，WordPress 才会显示更新。若提示「无法安装这个包」，说明 WordPress 已下载 ZIP 但解压后没有识别到有效插件文件，或下载到的不是 ZIP；可复制“更新包下载地址”到浏览器确认 ZIP 内是否包含 linkai-ai-customer-service.php。</p>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 12px 0;">
                 <form method="post">
                     <?php wp_nonce_field('linkai_clear_update_cache'); ?>
@@ -936,6 +1027,8 @@ final class LinkAI_AI_Customer_Service
             '当前插件版本' => self::VERSION,
             'GitHub 远程版本' => $remote_version,
             '更新判断' => $update_status,
+            '更新包下载地址' => $update['zip_url'] ?? '未生成',
+            '标准插件目录名' => self::PLUGIN_DIRECTORY_NAME,
             '当前插件目录' => $plugin_dir,
             '插件目录是否可写' => is_writable($plugin_dir) ? '是' : '否：请把 wp-content/plugins/' . basename($plugin_dir) . ' 的所有者/权限调整为 WordPress 可写',
             'wp-content/plugins 是否可写' => is_writable(WP_PLUGIN_DIR) ? '是' : '否：WordPress 无法替换插件目录',
