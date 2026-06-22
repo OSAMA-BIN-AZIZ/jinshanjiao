@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.10
+ * Version: 1.3.11
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.10';
+    private const VERSION = '1.3.11';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static bool $auto_widget_rendered = false;
@@ -355,10 +355,9 @@ final class LinkAI_AI_Customer_Service
             return new WP_Error('linkai_update_source_missing', sprintf('LinkAI 更新失败：解压后的更新目录不存在：%s', $source));
         }
 
-        $target = trailingslashit($remote_source) . self::PLUGIN_DIRECTORY_NAME;
         $plugin_file = basename(self::PLUGIN_FILE);
         $source = untrailingslashit($source);
-        $target = untrailingslashit($target);
+        $target = self::get_update_target_path($source, $remote_source);
 
         if (!$wp_filesystem->exists(trailingslashit($source) . $plugin_file)) {
             $found_source = self::find_update_source_with_plugin_file($source, $plugin_file);
@@ -399,6 +398,23 @@ final class LinkAI_AI_Customer_Service
             'linkai_update_source_move_failed',
             sprintf('LinkAI 更新失败：已找到插件主文件，但无法把 %1$s 移动为 %2$s。请检查 wp-content/upgrade 目录权限。', $source, $target)
         );
+    }
+
+
+    private static function get_update_target_path(string $source, string $remote_source): string
+    {
+        $source = untrailingslashit($source);
+        $remote_source = untrailingslashit($remote_source);
+
+        if (basename($remote_source) === self::PLUGIN_DIRECTORY_NAME) {
+            return $remote_source;
+        }
+
+        if (basename($source) === self::PLUGIN_DIRECTORY_NAME) {
+            return $source;
+        }
+
+        return untrailingslashit(trailingslashit($remote_source) . self::PLUGIN_DIRECTORY_NAME);
     }
 
     private static function describe_update_source(string $source): string
