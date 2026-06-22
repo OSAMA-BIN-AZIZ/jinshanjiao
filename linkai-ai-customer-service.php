@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.7
+ * Version: 1.3.8
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.7';
+    private const VERSION = '1.3.8';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
 
@@ -35,6 +35,7 @@ final class LinkAI_AI_Customer_Service
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [__CLASS__, 'add_settings_link']);
         add_filter('pre_set_site_transient_update_plugins', [__CLASS__, 'check_for_plugin_update']);
+        add_filter('site_transient_update_plugins', [__CLASS__, 'check_for_plugin_update']);
         add_filter('plugins_api', [__CLASS__, 'render_plugin_update_info'], 20, 3);
         add_filter('upgrader_source_selection', [__CLASS__, 'rename_github_update_source'], 10, 4);
     }
@@ -288,12 +289,15 @@ final class LinkAI_AI_Customer_Service
             return $transient;
         }
 
-        $update = self::get_github_update_data();
+        $plugin_basename = plugin_basename(self::PLUGIN_FILE);
+        $update = self::get_github_update_data(self::should_force_update_check());
         if (!$update || !version_compare($update['version'], self::VERSION, '>')) {
+            if (isset($transient->response[$plugin_basename])) {
+                unset($transient->response[$plugin_basename]);
+            }
             return $transient;
         }
 
-        $plugin_basename = plugin_basename(self::PLUGIN_FILE);
         $transient->response[$plugin_basename] = (object) [
             'slug' => self::PLUGIN_DIRECTORY_NAME,
             'plugin' => $plugin_basename,
@@ -399,7 +403,14 @@ final class LinkAI_AI_Customer_Service
         return '';
     }
 
-    private static function get_github_update_data(): ?array
+    private static function should_force_update_check(): bool
+    {
+        global $pagenow;
+
+        return is_admin() && in_array($pagenow, ['plugins.php', 'update-core.php', 'plugin-install.php'], true);
+    }
+
+    private static function get_github_update_data(bool $force_refresh = false): ?array
     {
         $options = self::get_options();
         $repo = self::parse_github_repo($options['update_repo_url']);
@@ -410,7 +421,7 @@ final class LinkAI_AI_Customer_Service
 
         $cache_key = self::get_update_cache_key($repo, $branch);
         $cached = get_site_transient($cache_key);
-        if (is_array($cached)) {
+        if (!$force_refresh && is_array($cached)) {
             return $cached;
         }
 
@@ -436,7 +447,7 @@ final class LinkAI_AI_Customer_Service
             'zip_url' => self::github_branch_zip_url($repo, $branch),
             'changelog' => self::extract_remote_changelog($remote_plugin),
         ];
-        set_site_transient($cache_key, $data, 15 * MINUTE_IN_SECONDS);
+        set_site_transient($cache_key, $data, MINUTE_IN_SECONDS);
 
         return $data;
     }
@@ -998,7 +1009,7 @@ final class LinkAI_AI_Customer_Service
                     <div class="notice notice-error inline"><p>无法自动修复插件目录权限。通常表示 PHP/WordPress 用户不是该目录所有者，需要通过主机面板、FTP 或 SSH 修改所有者/权限。</p></div>
                 <?php endif; ?>
             <?php endif; ?>
-            <p>如果后台检测不到更新，请先看下方“当前插件版本”和“GitHub 远程版本”：只有远程 Version 高于当前 Version 时，WordPress 才会显示更新。若提示「无法安装这个包」，说明 WordPress 已下载 ZIP 但解压后没有识别到有效插件文件，或下载到的不是 ZIP；可复制“更新包下载地址”到浏览器确认 ZIP 内是否包含 linkai-ai-customer-service.php。</p>
+            <p>插件页会自动刷新 GitHub 远程版本；如果后台检测不到更新，请先看下方“当前插件版本”和“GitHub 远程版本”：只有远程 Version 高于当前 Version 时，WordPress 才会显示更新。若提示「无法安装这个包」，说明 WordPress 已下载 ZIP 但解压后没有识别到有效插件文件，或下载到的不是 ZIP；可复制“更新包下载地址”到浏览器确认 ZIP 内是否包含 linkai-ai-customer-service.php。</p>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 12px 0;">
                 <form method="post">
                     <?php wp_nonce_field('linkai_clear_update_cache'); ?>
@@ -1018,7 +1029,7 @@ final class LinkAI_AI_Customer_Service
     private static function render_update_diagnostics(): void
     {
         $plugin_dir = dirname(self::PLUGIN_FILE);
-        $update = self::get_github_update_data();
+        $update = self::get_github_update_data(true);
         $remote_version = $update['version'] ?? '未检测到（请确认 GitHub 仓库、分支和网络访问）';
         $update_status = !empty($update['version']) && version_compare($update['version'], self::VERSION, '>')
             ? '有可用更新'

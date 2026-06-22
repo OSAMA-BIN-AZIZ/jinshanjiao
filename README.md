@@ -51,7 +51,7 @@ A suitable car parts website for deployment on WordPress.
 - GitHub 更新仓库： `https://github.com/OSAMA-BIN-AZIZ/jinshanjiao`
 - 更新分支：默认 `main`
 
-之后每次在 GitHub 更新插件时，请同步提高 `linkai-ai-customer-service.php` 文件头部的 `Version` 版本号。WordPress 后台「插件」页面只有在 GitHub 远程版本高于当前已安装版本时才会显示更新提示；如果你刚刚手动上传了最新版本，远程和本地版本相同就不会提示更新。更新器会以固定目录名 `jinshanjiao-main` 为准，避免 GitHub 分支压缩包目录名和 WordPress 插件目录名不一致导致 WordPress 报「更新失败：文件系统错误」。如果仍然失败，可在「LinkAI 客服 → 设置 → 更新排查」清除更新缓存，查看“更新包下载地址”，或点击「尝试修复插件权限」让插件尝试把目录设为可写。WordPress 更新时会自动下载 ZIP 并解压；“无法安装这个包”通常表示下载到的内容不是有效插件 ZIP，或 ZIP 解压后找不到 `linkai-ai-customer-service.php`。手动上传的插件常见问题是文件所有者不是 WordPress/PHP 运行用户，这种情况仍需通过主机面板、FTP 或 SSH 修改所有者。
+之后每次在 GitHub 更新插件时，请同步提高 `linkai-ai-customer-service.php` 文件头部的 `Version` 版本号。WordPress 后台「插件」页面只有在 GitHub 远程版本高于当前已安装版本时才会显示更新提示；如果你刚刚手动上传了最新版本，远程和本地版本相同就不会提示更新。更新器会以固定目录名 `jinshanjiao-main` 为准，避免 GitHub 分支压缩包目录名和 WordPress 插件目录名不一致导致 WordPress 报「更新失败：文件系统错误」。插件页会自动刷新 GitHub 远程版本，不需要先手动清除缓存才检测更新；如果仍然失败，可在「LinkAI 客服 → 设置 → 更新排查」查看“更新包下载地址”，或点击「尝试修复插件权限」让插件尝试把目录设为可写。WordPress 更新时会自动下载 ZIP 并解压；“无法安装这个包”通常表示下载到的内容不是有效插件 ZIP，或 ZIP 解压后找不到 `linkai-ai-customer-service.php`。手动上传的插件常见问题是文件所有者不是 WordPress/PHP 运行用户，这种情况仍需通过主机面板、FTP 或 SSH 修改所有者。
 
 
 ### 上传到 WordPress 插件市场
