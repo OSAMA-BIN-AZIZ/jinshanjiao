@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.3
+ * Version: 1.3.4
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.3';
+    private const VERSION = '1.3.4';
     private const PLUGIN_FILE = __FILE__;
 
     public static function init(): void
@@ -907,7 +907,7 @@ final class LinkAI_AI_Customer_Service
                     <div class="notice notice-error inline"><p>无法自动修复插件目录权限。通常表示 PHP/WordPress 用户不是该目录所有者，需要通过主机面板、FTP 或 SSH 修改所有者/权限。</p></div>
                 <?php endif; ?>
             <?php endif; ?>
-            <p>如果仍提示「更新失败：文件系统错误」，通常是手动上传插件后目录/文件归属或权限与 WordPress 运行用户不一致。可先清除缓存，再检查下方权限状态；如果只是权限位不正确，可以点击“尝试修复插件权限”。</p>
+            <p>如果后台检测不到更新，请先看下方“当前插件版本”和“GitHub 远程版本”：只有远程 Version 高于当前 Version 时，WordPress 才会显示更新。若版本已高但仍不显示，可先清除更新缓存；若提示「更新失败：文件系统错误」，再检查权限状态或点击“尝试修复插件权限”。</p>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 12px 0;">
                 <form method="post">
                     <?php wp_nonce_field('linkai_clear_update_cache'); ?>
@@ -927,7 +927,15 @@ final class LinkAI_AI_Customer_Service
     private static function render_update_diagnostics(): void
     {
         $plugin_dir = dirname(self::PLUGIN_FILE);
+        $update = self::get_github_update_data();
+        $remote_version = $update['version'] ?? '未检测到（请确认 GitHub 仓库、分支和网络访问）';
+        $update_status = !empty($update['version']) && version_compare($update['version'], self::VERSION, '>')
+            ? '有可用更新'
+            : '没有可用更新：只有 GitHub 远程 Version 高于当前 Version 时，WordPress 才会显示更新';
         $diagnostics = [
+            '当前插件版本' => self::VERSION,
+            'GitHub 远程版本' => $remote_version,
+            '更新判断' => $update_status,
             '当前插件目录' => $plugin_dir,
             '插件目录是否可写' => is_writable($plugin_dir) ? '是' : '否：请把 wp-content/plugins/' . basename($plugin_dir) . ' 的所有者/权限调整为 WordPress 可写',
             'wp-content/plugins 是否可写' => is_writable(WP_PLUGIN_DIR) ? '是' : '否：WordPress 无法替换插件目录',
