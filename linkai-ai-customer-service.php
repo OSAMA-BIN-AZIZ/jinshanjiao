@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.1
+ * Version: 1.3.3
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.1';
+    private const VERSION = '1.3.3';
     private const PLUGIN_FILE = __FILE__;
 
     public static function init(): void
@@ -26,6 +26,7 @@ final class LinkAI_AI_Customer_Service
         add_action('admin_notices', [__CLASS__, 'render_missing_key_notice']);
         add_action('admin_init', [__CLASS__, 'register_settings']);
         add_action('admin_init', [__CLASS__, 'handle_update_cache_clear']);
+        add_action('admin_init', [__CLASS__, 'handle_permission_fix']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
         add_action('wp_footer', [__CLASS__, 'render_chat_widget']);
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
@@ -87,31 +88,59 @@ final class LinkAI_AI_Customer_Service
 
     public static function add_settings_page(): void
     {
-        add_options_page(
-            'LinkAI 智能客服',
-            'LinkAI 智能客服',
+        add_menu_page(
+            'LinkAI 客服',
+            'LinkAI 客服',
+            'manage_options',
+            'linkai-ai-customer-service',
+            [__CLASS__, 'render_settings_page'],
+            'dashicons-format-chat',
+            58
+        );
+
+        add_submenu_page(
+            'linkai-ai-customer-service',
+            'LinkAI 智能客服设置',
+            '设置',
             'manage_options',
             'linkai-ai-customer-service',
             [__CLASS__, 'render_settings_page']
         );
 
-        add_management_page(
+        add_submenu_page(
+            'linkai-ai-customer-service',
             'LinkAI 客户管理',
-            'LinkAI 客户管理',
+            '客户管理',
             'manage_options',
             'linkai-customer-records',
             [__CLASS__, 'render_customer_records_page']
         );
     }
 
+
+    private static function settings_page_url(): string
+    {
+        return admin_url('admin.php?page=linkai-ai-customer-service');
+    }
+
+    private static function customer_records_page_url(): string
+    {
+        return admin_url('admin.php?page=linkai-customer-records');
+    }
+
     public static function add_settings_link(array $links): array
     {
         $settings_link = sprintf(
             '<a href="%s">%s</a>',
-            esc_url(admin_url('options-general.php?page=linkai-ai-customer-service')),
+            esc_url(self::settings_page_url()),
             esc_html__('设置 API Key', 'linkai-ai-customer-service')
         );
-        array_unshift($links, $settings_link);
+        $customers_link = sprintf(
+            '<a href="%s">%s</a>',
+            esc_url(self::customer_records_page_url()),
+            esc_html__('客户管理', 'linkai-ai-customer-service')
+        );
+        array_unshift($links, $customers_link, $settings_link);
 
         return $links;
     }
@@ -123,7 +152,7 @@ final class LinkAI_AI_Customer_Service
         }
 
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        $is_settings_page = $screen && $screen->id === 'settings_page_linkai-ai-customer-service';
+        $is_settings_page = $screen && in_array($screen->id, ['toplevel_page_linkai-ai-customer-service', 'settings_page_linkai-ai-customer-service'], true);
         $options = self::get_options();
         if (!empty($options['api_key']) || $is_settings_page) {
             return;
@@ -132,7 +161,7 @@ final class LinkAI_AI_Customer_Service
         printf(
             '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
             esc_html__('LinkAI 智能客服需要先配置 API Key 才能回复访客消息。', 'linkai-ai-customer-service'),
-            esc_url(admin_url('options-general.php?page=linkai-ai-customer-service')),
+            esc_url(self::settings_page_url()),
             esc_html__('现在去设置', 'linkai-ai-customer-service')
         );
     }
@@ -173,6 +202,49 @@ final class LinkAI_AI_Customer_Service
     }
 
 
+
+    public static function handle_permission_fix(): void
+    {
+        if (!current_user_can('manage_options') || empty($_POST['linkai_fix_permissions'])) {
+            return;
+        }
+
+        check_admin_referer('linkai_fix_permissions');
+        $fixed = self::chmod_plugin_directory(dirname(self::PLUGIN_FILE));
+
+        wp_safe_redirect(add_query_arg(['permission_fixed' => $fixed ? '1' : '0'], self::settings_page_url()));
+        exit;
+    }
+
+    private static function chmod_plugin_directory(string $plugin_dir): bool
+    {
+        $dir_mode = defined('FS_CHMOD_DIR') ? FS_CHMOD_DIR : 0755;
+        $file_mode = defined('FS_CHMOD_FILE') ? FS_CHMOD_FILE : 0644;
+        $success = self::chmod_path($plugin_dir, $dir_mode);
+
+        if (!is_dir($plugin_dir) || !is_readable($plugin_dir)) {
+            return false;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($plugin_dir, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            $path = $item->getPathname();
+            $mode = $item->isDir() ? $dir_mode : $file_mode;
+            $success = self::chmod_path($path, $mode) && $success;
+        }
+
+        return $success && is_writable($plugin_dir);
+    }
+
+    private static function chmod_path(string $path, int $mode): bool
+    {
+        return file_exists($path) && @chmod($path, $mode);
+    }
+
     public static function handle_update_cache_clear(): void
     {
         if (!current_user_can('manage_options') || empty($_POST['linkai_clear_update_cache'])) {
@@ -183,7 +255,7 @@ final class LinkAI_AI_Customer_Service
         self::delete_update_cache();
         delete_site_transient('update_plugins');
 
-        wp_safe_redirect(add_query_arg(['page' => 'linkai-ai-customer-service', 'update_cache_cleared' => '1'], admin_url('options-general.php')));
+        wp_safe_redirect(add_query_arg(['update_cache_cleared' => '1'], self::settings_page_url()));
         exit;
     }
 
@@ -650,7 +722,7 @@ final class LinkAI_AI_Customer_Service
                     ['%s', '%s', '%s', '%s', '%s'],
                     ['%s']
                 );
-                wp_safe_redirect(add_query_arg(['page' => 'linkai-customer-records', 'conversation_id' => $posted_conversation_id, 'updated' => '1'], admin_url('tools.php')));
+                wp_safe_redirect(add_query_arg(['conversation_id' => $posted_conversation_id, 'updated' => '1'], self::customer_records_page_url()));
                 exit;
             }
         }
@@ -679,7 +751,7 @@ final class LinkAI_AI_Customer_Service
                     <?php endif; ?>
                     <?php foreach ($customers as $customer) : ?>
                         <tr>
-                            <td><a href="<?php echo esc_url(add_query_arg(['page' => 'linkai-customer-records', 'conversation_id' => $customer->conversation_id], admin_url('tools.php'))); ?>"><?php echo esc_html($customer->customer_name ?: '未留姓名'); ?></a></td>
+                            <td><a href="<?php echo esc_url(add_query_arg(['conversation_id' => $customer->conversation_id], self::customer_records_page_url())); ?>"><?php echo esc_html($customer->customer_name ?: '未留姓名'); ?></a></td>
                             <td><?php echo esc_html($customer->contact ?: '未留联系方式'); ?></td>
                             <td><?php echo esc_html(self::customer_status_label($customer->status ?? 'new')); ?></td>
                             <td><?php echo esc_html(wp_trim_words($customer->last_message, 18)); ?></td>
@@ -828,11 +900,24 @@ final class LinkAI_AI_Customer_Service
             <?php if (isset($_GET['update_cache_cleared'])) : ?>
                 <div class="notice notice-success inline"><p>更新缓存已清除。请回到「插件」页面重新检查更新。</p></div>
             <?php endif; ?>
-            <p>如果仍提示「更新失败：文件系统错误」，通常是手动上传插件后目录/文件归属或权限与 WordPress 运行用户不一致。可先清除缓存，再检查下方权限状态。</p>
-            <form method="post">
-                <?php wp_nonce_field('linkai_clear_update_cache'); ?>
-                <?php submit_button('清除更新缓存', 'secondary', 'linkai_clear_update_cache', false); ?>
-            </form>
+            <?php if (isset($_GET['permission_fixed'])) : ?>
+                <?php if ($_GET['permission_fixed'] === '1') : ?>
+                    <div class="notice notice-success inline"><p>已尝试修复插件目录权限。请重新检查下方状态并再次更新。</p></div>
+                <?php else : ?>
+                    <div class="notice notice-error inline"><p>无法自动修复插件目录权限。通常表示 PHP/WordPress 用户不是该目录所有者，需要通过主机面板、FTP 或 SSH 修改所有者/权限。</p></div>
+                <?php endif; ?>
+            <?php endif; ?>
+            <p>如果仍提示「更新失败：文件系统错误」，通常是手动上传插件后目录/文件归属或权限与 WordPress 运行用户不一致。可先清除缓存，再检查下方权限状态；如果只是权限位不正确，可以点击“尝试修复插件权限”。</p>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 12px 0;">
+                <form method="post">
+                    <?php wp_nonce_field('linkai_clear_update_cache'); ?>
+                    <?php submit_button('清除更新缓存', 'secondary', 'linkai_clear_update_cache', false); ?>
+                </form>
+                <form method="post">
+                    <?php wp_nonce_field('linkai_fix_permissions'); ?>
+                    <?php submit_button('尝试修复插件权限', 'secondary', 'linkai_fix_permissions', false); ?>
+                </form>
+            </div>
             <?php self::render_update_diagnostics(); ?>
         </div>
         <?php
