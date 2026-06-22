@@ -4,7 +4,7 @@ Tags: ai, customer-service, chat, chatbot, crm
 Requires at least: 5.8
 Tested up to: 6.9.4
 Requires PHP: 7.4
-Stable tag: 1.3.13
+Stable tag: 1.3.14
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,6 +51,9 @@ WordPress 更新会自动下载 ZIP 并解压。这个提示通常表示 ZIP 包
 通常是手动上传插件后目录所有者或权限不一致。可在「LinkAI 客服 → 设置 → 更新排查」中清除缓存或尝试修复权限；如果 PHP 用户不是目录所有者，仍需通过主机面板、FTP 或 SSH 修改所有者。
 
 == Changelog ==
+
+= 1.3.14 =
+* 修复嵌套 jinshanjiao-main 源目录移动到父目录失败的问题。
 
 = 1.3.13 =
 * 增加登录可见、未登录不可见时的缓存排查说明。
