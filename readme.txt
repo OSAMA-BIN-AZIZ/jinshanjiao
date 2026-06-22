@@ -4,7 +4,7 @@ Tags: ai, customer-service, chat, chatbot, crm
 Requires at least: 5.8
 Tested up to: 6.9.4
 Requires PHP: 7.4
-Stable tag: 1.3.11
+Stable tag: 1.3.13
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ LinkAI 智能 AI 客服可以在网站右下角显示客服聊天窗口，通过
 
 主要功能：
 
-* 全站右下角悬浮智能客服窗口，自动显示兼容 `wp_body_open` 和 `wp_footer`。
+* 全站右下角悬浮智能客服窗口，自动显示兼容 `wp_body_open`、`wp_footer` 和前端 JS 兜底渲染。
 * 支持短代码 `[linkai_customer_service]` 嵌入指定页面。
 * 后台配置 LinkAI API Key、应用 Code、模型、温度、欢迎语和系统提示词。
 * 自动携带最近上下文，支持连续对话。
@@ -33,6 +33,11 @@ LinkAI 智能 AI 客服可以在网站右下角显示客服聊天窗口，通过
 
 == Frequently Asked Questions ==
 
+
+= 登录后能看到，未登录看不到怎么办？ =
+
+通常是缓存问题。登录用户一般绕过页面缓存，未登录访客会看到缓存的旧首页 HTML。请清理 WordPress 缓存插件、服务器缓存和 CDN 缓存，并确认首页 `/` 没有被单独缓存。
+
 = 为什么后台检测不到更新？ =
 
 WordPress 只有在远程插件文件头部的 `Version` 高于当前已安装版本时才会提示更新。如果刚刚手动上传的是最新版，本地和远程版本相同，就不会出现更新提示。
@@ -46,6 +51,12 @@ WordPress 更新会自动下载 ZIP 并解压。这个提示通常表示 ZIP 包
 通常是手动上传插件后目录所有者或权限不一致。可在「LinkAI 客服 → 设置 → 更新排查」中清除缓存或尝试修复权限；如果 PHP 用户不是目录所有者，仍需通过主机面板、FTP 或 SSH 修改所有者。
 
 == Changelog ==
+
+= 1.3.13 =
+* 增加登录可见、未登录不可见时的缓存排查说明。
+
+= 1.3.12 =
+* 增加前端 JS 兜底渲染，改善首页缓存或模板缺少挂载点时不显示的问题。
 
 = 1.3.11 =
 * 修复更新临时目录可能重复拼接 jinshanjiao-main 的问题。

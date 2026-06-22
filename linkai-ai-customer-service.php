@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.11
+ * Version: 1.3.13
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.11';
+    private const VERSION = '1.3.13';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static bool $auto_widget_rendered = false;
@@ -556,7 +556,7 @@ final class LinkAI_AI_Customer_Service
             plugins_url('assets/customer-service.js', __FILE__),
             [],
             self::VERSION,
-            true
+            false
         );
 
         if (self::get_options()['auto_render'] === '1') {
@@ -616,11 +616,15 @@ final class LinkAI_AI_Customer_Service
     {
         wp_enqueue_style('linkai-ai-customer-service');
         wp_enqueue_script('linkai-ai-customer-service');
+        $options = self::get_options();
         wp_localize_script('linkai-ai-customer-service', 'LinkAICustomerService', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(self::NONCE_ACTION),
             'errorMessage' => '抱歉，智能客服暂时无法连接，请稍后再试或留下联系方式。',
             'conversationStorageKey' => 'linkai_customer_service_conversation_id',
+            'autoRender' => $options['auto_render'] === '1',
+            'assistantName' => $options['assistant_name'],
+            'welcomeMessage' => $options['welcome_message'],
         ]);
     }
 
@@ -1048,6 +1052,10 @@ final class LinkAI_AI_Customer_Service
                 </table>
                 <?php submit_button('保存设置'); ?>
             </form>
+
+            <hr>
+            <h2>前台显示排查</h2>
+            <p>如果登录后台后前台能看到客服图标，但未登录访客看不到，通常不是插件渲染失败，而是首页缓存、CDN 缓存或静态缓存还在返回旧 HTML。请清理 WordPress 缓存插件、服务器缓存和 CDN 缓存，并确认首页没有被单独缓存为旧版本。</p>
 
             <hr>
             <h2>更新排查</h2>

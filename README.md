@@ -8,7 +8,7 @@ A suitable car parts website for deployment on WordPress.
 
 ### 功能
 
-- 全站右下角悬浮智能客服窗口，自动显示会同时兼容 `wp_body_open` 和 `wp_footer`。
+- 全站右下角悬浮智能客服窗口，自动显示会同时兼容 `wp_body_open`、`wp_footer` 和前端 JS 兜底渲染。
 - 支持短代码 `[linkai_customer_service]` 嵌入指定页面。
 - WordPress 后台可配置 LinkAI API Key，支持已保存密钥提示、留空保留、重新填写替换和清除密钥。
 - 后台配置应用 Code、模型、温度、欢迎语、系统提示词，以及 GitHub 更新仓库和分支。
@@ -43,6 +43,11 @@ A suitable car parts website for deployment on WordPress.
 - 会话 ID 和更新时间
 
 管理员可以进入后台左侧菜单「LinkAI 客服 → 客户管理」查看最近 100 个客户，并点击客户查看完整聊天详情；也可以补充/修改客户姓名、联系方式、跟进状态和客户备注，方便后续人工跟进。插件列表中也会显示「客户管理」快捷入口。
+
+
+### 前台显示排查
+
+如果登录后台后访问首页能看到客服图标，但未登录/无痕窗口访问首页看不到，通常说明插件已经正常工作，问题在缓存层：登录用户往往绕过缓存，而未登录访客会拿到首页旧缓存。请清理 WordPress 缓存插件、服务器缓存、CDN 缓存，并确认首页 `/` 没有被单独缓存为旧 HTML。
 
 ### 后台一键更新
 
