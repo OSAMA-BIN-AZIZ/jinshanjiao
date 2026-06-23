@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.17
+ * Version: 1.3.18
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,10 +17,10 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.17';
+    private const VERSION = '1.3.18';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
-    private static bool $auto_widget_rendered = false;
+    private static $auto_widget_rendered = false;
 
     public static function init(): void
     {
@@ -98,6 +98,26 @@ final class LinkAI_AI_Customer_Service
             KEY conversation_id (conversation_id),
             KEY created_at (created_at)
         ) {$charset_collate};");
+    }
+
+    private static function maybe_upgrade_customer_tables(): void
+    {
+        global $wpdb;
+
+        $customers_table = self::customers_table();
+        if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $customers_table)) !== $customers_table) {
+            return;
+        }
+
+        $column = $wpdb->get_var($wpdb->prepare('SHOW COLUMNS FROM ' . $customers_table . ' LIKE %s', 'ai_paused'));
+        if ($column === null) {
+            $wpdb->query('ALTER TABLE ' . $customers_table . ' ADD ai_paused tinyint(1) NOT NULL DEFAULT 0 AFTER last_reply');
+        }
+
+        $index = $wpdb->get_var($wpdb->prepare('SHOW INDEX FROM ' . $customers_table . ' WHERE Key_name = %s', 'ai_paused'));
+        if ($index === null) {
+            $wpdb->query('ALTER TABLE ' . $customers_table . ' ADD INDEX ai_paused (ai_paused)');
+        }
     }
 
     public static function add_settings_page(): void
