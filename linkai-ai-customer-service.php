@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.14
+ * Version: 1.3.17
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.14';
+    private const VERSION = '1.3.17';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static bool $auto_widget_rendered = false;
@@ -35,6 +35,8 @@ final class LinkAI_AI_Customer_Service
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
         add_action('wp_ajax_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
+        add_action('wp_ajax_linkai_customer_updates', [__CLASS__, 'handle_updates_request']);
+        add_action('wp_ajax_nopriv_linkai_customer_updates', [__CLASS__, 'handle_updates_request']);
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [__CLASS__, 'add_settings_link']);
         add_filter('pre_set_site_transient_update_plugins', [__CLASS__, 'check_for_plugin_update']);
         add_filter('site_transient_update_plugins', [__CLASS__, 'check_for_plugin_update']);
@@ -45,6 +47,7 @@ final class LinkAI_AI_Customer_Service
     public static function activate(): void
     {
         self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
     }
 
     private static function create_customer_tables(): void
@@ -68,6 +71,7 @@ final class LinkAI_AI_Customer_Service
             first_message text NULL,
             last_message text NULL,
             last_reply text NULL,
+            ai_paused tinyint(1) NOT NULL DEFAULT 0,
             status varchar(30) NOT NULL DEFAULT 'new',
             notes text NULL,
             created_at datetime NOT NULL,
@@ -76,6 +80,7 @@ final class LinkAI_AI_Customer_Service
             UNIQUE KEY conversation_id (conversation_id),
             KEY updated_at (updated_at),
             KEY status (status),
+            KEY ai_paused (ai_paused),
             KEY ip_address (ip_address),
             KEY contact (contact)
         ) {$charset_collate};");
@@ -205,6 +210,7 @@ final class LinkAI_AI_Customer_Service
             'welcome_message' => isset($input['welcome_message']) ? sanitize_textarea_field($input['welcome_message']) : $defaults['welcome_message'],
             'system_prompt' => isset($input['system_prompt']) ? sanitize_textarea_field($input['system_prompt']) : $defaults['system_prompt'],
             'auto_render' => !empty($input['auto_render']) ? '1' : '0',
+            'human_takeover_timeout' => isset($input['human_takeover_timeout']) ? min(1440, max(0, (int) $input['human_takeover_timeout'])) : $defaults['human_takeover_timeout'],
             'update_repo_url' => isset($input['update_repo_url']) ? esc_url_raw(trim($input['update_repo_url'])) : $defaults['update_repo_url'],
             'update_branch' => isset($input['update_branch']) ? self::sanitize_update_branch($input['update_branch']) : $defaults['update_branch'],
         ];
@@ -629,6 +635,53 @@ final class LinkAI_AI_Customer_Service
         ]);
     }
 
+    public static function handle_updates_request(): void
+    {
+        check_ajax_referer(self::NONCE_ACTION, 'nonce');
+
+        global $wpdb;
+        self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
+
+        $conversation_id = isset($_POST['conversation_id']) ? sanitize_key(wp_unslash($_POST['conversation_id'])) : '';
+        $after_id = isset($_POST['after_id']) ? max(0, (int) $_POST['after_id']) : 0;
+        if ($conversation_id === '') {
+            wp_send_json_error(['message' => '会话不存在。'], 400);
+        }
+
+        $customers_table = self::customers_table();
+        $messages_table = self::messages_table();
+        $customer = $wpdb->get_row($wpdb->prepare("SELECT ai_paused FROM {$customers_table} WHERE conversation_id = %s", $conversation_id));
+        if (!$customer) {
+            wp_send_json_success(['messages' => [], 'ai_paused' => false]);
+        }
+
+        $messages = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT id, role, content, created_at FROM {$messages_table} WHERE conversation_id = %s AND id > %d AND role IN ('assistant', 'human') ORDER BY id ASC LIMIT 20",
+                $conversation_id,
+                $after_id
+            ),
+            ARRAY_A
+        );
+
+        wp_send_json_success([
+            'messages' => array_map([__CLASS__, 'format_frontend_message'], $messages),
+            'ai_paused' => !empty($customer->ai_paused),
+        ]);
+    }
+
+    private static function format_frontend_message(array $message): array
+    {
+        return [
+            'id' => (int) $message['id'],
+            'role' => $message['role'] === 'human' ? 'assistant' : $message['role'],
+            'content' => wp_kses_post($message['content']),
+            'created_at' => $message['created_at'],
+            'source' => $message['role'],
+        ];
+    }
+
     public static function handle_chat_request(): void
     {
         check_ajax_referer(self::NONCE_ACTION, 'nonce');
@@ -668,6 +721,19 @@ final class LinkAI_AI_Customer_Service
             if ($content !== '') {
                 $messages[] = ['role' => $item['role'], 'content' => $content];
             }
+        }
+
+        $pause_state = self::record_customer_question($conversation_id, $customer_name, $contact, $message);
+        if (!empty($pause_state['ai_paused'])) {
+            wp_send_json_success([
+                'reply' => '人工客服已接管此会话，AI 自动回复已暂停。请稍候，客服会继续跟进。',
+                'conversation_id' => $conversation_id,
+                'trace_id' => '',
+                'message_id' => $pause_state['message_id'],
+                'ai_paused' => true,
+                'human_takeover_timeout' => (int) $options['human_takeover_timeout'],
+                'suggested_questions' => [],
+            ]);
         }
 
         $messages[] = ['role' => 'user', 'content' => $message];
@@ -710,20 +776,24 @@ final class LinkAI_AI_Customer_Service
         }
 
         $trace_id = $data['trace_id'] ?? '';
-        self::record_customer_message($conversation_id, $customer_name, $contact, $message, $reply, (string) $trace_id);
+        $message_ids = self::record_assistant_reply($conversation_id, $reply, (string) $trace_id);
 
         wp_send_json_success([
             'reply' => wp_kses_post($reply),
             'conversation_id' => $conversation_id,
             'trace_id' => $trace_id,
+            'message_id' => $message_ids['assistant_id'],
+            'ai_paused' => false,
+            'human_takeover_timeout' => (int) $options['human_takeover_timeout'],
             'suggested_questions' => $data['suggested_questions'] ?? [],
         ]);
     }
 
-    private static function record_customer_message(string $conversation_id, string $customer_name, string $contact, string $message, string $reply, string $trace_id): void
+    private static function record_customer_question(string $conversation_id, string $customer_name, string $contact, string $message): array
     {
         global $wpdb;
         self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
 
         $now = current_time('mysql');
         $customers_table = self::customers_table();
@@ -742,11 +812,10 @@ final class LinkAI_AI_Customer_Service
                     'device' => self::get_customer_device(),
                     'user_agent' => self::get_customer_user_agent(),
                     'last_message' => $message,
-                    'last_reply' => $reply,
                     'updated_at' => $now,
                 ],
                 ['id' => $customer_id],
-                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'],
+                ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'],
                 ['%d']
             );
         } else {
@@ -762,29 +831,117 @@ final class LinkAI_AI_Customer_Service
                     'user_agent' => self::get_customer_user_agent(),
                     'first_message' => $message,
                     'last_message' => $message,
-                    'last_reply' => $reply,
+                    'last_reply' => '',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ],
                 ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s']
             );
             $customer_id = (int) $wpdb->insert_id;
+            $customer = (object) ['ai_paused' => 0];
         }
 
-        foreach ([['user', $message, ''], ['assistant', $reply, $trace_id]] as $item) {
-            $wpdb->insert(
-                $messages_table,
-                [
-                    'customer_id' => $customer_id,
-                    'conversation_id' => $conversation_id,
-                    'role' => $item[0],
-                    'content' => $item[1],
-                    'trace_id' => $item[2],
-                    'created_at' => $now,
-                ],
-                ['%d', '%s', '%s', '%s', '%s', '%s']
-            );
+        $wpdb->insert(
+            $messages_table,
+            [
+                'customer_id' => $customer_id,
+                'conversation_id' => $conversation_id,
+                'role' => 'user',
+                'content' => $message,
+                'trace_id' => '',
+                'created_at' => $now,
+            ],
+            ['%d', '%s', '%s', '%s', '%s', '%s']
+        );
+
+        $message_id = (int) $wpdb->insert_id;
+        $pause_state = self::resolve_ai_pause_state($conversation_id, !empty($customer->ai_paused));
+
+        return ['message_id' => $message_id, 'ai_paused' => $pause_state['ai_paused'], 'pause_expired' => $pause_state['pause_expired']];
+    }
+
+    private static function resolve_ai_pause_state(string $conversation_id, bool $is_paused): array
+    {
+        if (!$is_paused) {
+            return ['ai_paused' => false, 'pause_expired' => false];
         }
+
+        $options = self::get_options();
+        $timeout_minutes = (int) $options['human_takeover_timeout'];
+        if ($timeout_minutes <= 0) {
+            return ['ai_paused' => true, 'pause_expired' => false];
+        }
+
+        global $wpdb;
+        $messages_table = self::messages_table();
+        $last_human_at = $wpdb->get_var($wpdb->prepare("SELECT created_at FROM {$messages_table} WHERE conversation_id = %s AND role = 'human' ORDER BY id DESC LIMIT 1", $conversation_id));
+        if (empty($last_human_at)) {
+            return ['ai_paused' => true, 'pause_expired' => false];
+        }
+
+        $last_human_timestamp = strtotime((string) $last_human_at);
+        if (!$last_human_timestamp || current_time('timestamp') - $last_human_timestamp < $timeout_minutes * MINUTE_IN_SECONDS) {
+            return ['ai_paused' => true, 'pause_expired' => false];
+        }
+
+        $customers_table = self::customers_table();
+        $wpdb->update(
+            $customers_table,
+            ['ai_paused' => 0, 'updated_at' => current_time('mysql')],
+            ['conversation_id' => $conversation_id],
+            ['%d', '%s'],
+            ['%s']
+        );
+
+        return ['ai_paused' => false, 'pause_expired' => true];
+    }
+
+    private static function record_assistant_reply(string $conversation_id, string $reply, string $trace_id): array
+    {
+        return ['assistant_id' => self::insert_staff_message($conversation_id, 'assistant', $reply, $trace_id, false)];
+    }
+
+    private static function insert_staff_message(string $conversation_id, string $role, string $content, string $trace_id = '', bool $pause_ai = true): int
+    {
+        global $wpdb;
+        self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
+
+        $now = current_time('mysql');
+        $customers_table = self::customers_table();
+        $messages_table = self::messages_table();
+        $customer = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$customers_table} WHERE conversation_id = %s", $conversation_id));
+        if (!$customer) {
+            return 0;
+        }
+
+        $wpdb->insert(
+            $messages_table,
+            [
+                'customer_id' => (int) $customer->id,
+                'conversation_id' => $conversation_id,
+                'role' => $role,
+                'content' => $content,
+                'trace_id' => $trace_id,
+                'created_at' => $now,
+            ],
+            ['%d', '%s', '%s', '%s', '%s', '%s']
+        );
+        $message_id = (int) $wpdb->insert_id;
+
+        $wpdb->update(
+            $customers_table,
+            [
+                'last_reply' => $content,
+                'ai_paused' => $pause_ai ? 1 : (int) $customer->ai_paused,
+                'updated_at' => $now,
+            ],
+            ['id' => (int) $customer->id],
+            ['%s', '%d', '%s'],
+            ['%d']
+        );
+
+        return $message_id;
     }
 
     public static function render_customer_records_page(): void
@@ -795,6 +952,7 @@ final class LinkAI_AI_Customer_Service
 
         global $wpdb;
         self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
         $customers_table = self::customers_table();
         $messages_table = self::messages_table();
 
@@ -819,6 +977,32 @@ final class LinkAI_AI_Customer_Service
             }
         }
 
+        if (isset($_POST['linkai_human_reply_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['linkai_human_reply_nonce'])), 'linkai_human_reply')) {
+            $posted_conversation_id = isset($_POST['conversation_id']) ? sanitize_key(wp_unslash($_POST['conversation_id'])) : '';
+            $human_reply = isset($_POST['human_reply']) ? sanitize_textarea_field(wp_unslash($_POST['human_reply'])) : '';
+            if ($posted_conversation_id !== '' && $human_reply !== '') {
+                self::insert_staff_message($posted_conversation_id, 'human', $human_reply, '', true);
+                wp_safe_redirect(add_query_arg(['conversation_id' => $posted_conversation_id, 'human_replied' => '1'], self::customer_records_page_url()));
+                exit;
+            }
+        }
+
+        if (isset($_POST['linkai_ai_pause_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['linkai_ai_pause_nonce'])), 'linkai_ai_pause')) {
+            $posted_conversation_id = isset($_POST['conversation_id']) ? sanitize_key(wp_unslash($_POST['conversation_id'])) : '';
+            $ai_paused = !empty($_POST['ai_paused']) ? 1 : 0;
+            if ($posted_conversation_id !== '') {
+                $wpdb->update(
+                    $customers_table,
+                    ['ai_paused' => $ai_paused, 'updated_at' => current_time('mysql')],
+                    ['conversation_id' => $posted_conversation_id],
+                    ['%d', '%s'],
+                    ['%s']
+                );
+                wp_safe_redirect(add_query_arg(['conversation_id' => $posted_conversation_id, 'ai_pause_updated' => '1'], self::customer_records_page_url()));
+                exit;
+            }
+        }
+
         $conversation_id = isset($_GET['conversation_id']) ? sanitize_key(wp_unslash($_GET['conversation_id'])) : '';
         $customers = $wpdb->get_results("SELECT * FROM {$customers_table} ORDER BY updated_at DESC LIMIT 100");
         $selected = null;
@@ -830,9 +1014,15 @@ final class LinkAI_AI_Customer_Service
         ?>
         <div class="wrap">
             <h1>LinkAI 客户管理</h1>
-            <p>这里会保存访客在智能客服中留下的姓名、电话/微信，以及完整聊天记录，方便后续人工跟进。</p>
+            <p>这里会保存访客在智能客服中留下的姓名、电话/微信，以及完整聊天记录；人工主动回复会自动暂停该会话的 AI 回复，避免客户同时收到 AI 与人工的重复答复。</p>
             <?php if (isset($_GET['updated'])) : ?>
                 <div class="notice notice-success is-dismissible"><p>客户资料已更新。</p></div>
+            <?php endif; ?>
+            <?php if (isset($_GET['human_replied'])) : ?>
+                <div class="notice notice-success is-dismissible"><p>人工回复已发送，AI 自动回复已暂停。</p></div>
+            <?php endif; ?>
+            <?php if (isset($_GET['ai_pause_updated'])) : ?>
+                <div class="notice notice-success is-dismissible"><p>AI 接管状态已更新。</p></div>
             <?php endif; ?>
             <div style="display:grid;grid-template-columns:minmax(360px, 1fr) 1.2fr;gap:24px;align-items:start;">
                 <table class="widefat striped">
@@ -857,6 +1047,20 @@ final class LinkAI_AI_Customer_Service
                 <div class="postbox" style="padding:16px;">
                     <?php if ($selected) : ?>
                         <h2><?php echo esc_html($selected->customer_name ?: '未留姓名'); ?></h2>
+                        <p><strong>AI 回复状态：</strong><?php echo !empty($selected->ai_paused) ? '<span style="color:#b32d2e;">已暂停（人工接管）</span>' : '<span style="color:#008a20;">自动回复中</span>'; ?></p>
+                        <form method="post" style="margin-bottom:16px;padding:12px;border:1px solid #dcdcde;background:#fff;">
+                            <?php wp_nonce_field('linkai_human_reply', 'linkai_human_reply_nonce'); ?>
+                            <input type="hidden" name="conversation_id" value="<?php echo esc_attr($selected->conversation_id); ?>">
+                            <p><label><strong>主动人工回复：</strong><br><textarea name="human_reply" class="large-text" rows="4" placeholder="输入后会发送到访客聊天窗口，并自动暂停 AI 回复"></textarea></label></p>
+                            <p class="description">人工回复后，AI 会暂停；如果客户再次留言且 <?php echo esc_html((string) $options['human_takeover_timeout']); ?> 分钟内没有新的人工回复，AI 会自动恢复接待。</p>
+                            <?php submit_button('发送人工回复并暂停 AI', 'primary', 'submit', false); ?>
+                        </form>
+                        <form method="post" style="margin-bottom:16px;">
+                            <?php wp_nonce_field('linkai_ai_pause', 'linkai_ai_pause_nonce'); ?>
+                            <input type="hidden" name="conversation_id" value="<?php echo esc_attr($selected->conversation_id); ?>">
+                            <label><input type="checkbox" name="ai_paused" value="1" <?php checked(!empty($selected->ai_paused)); ?>> 暂停此会话的 AI 自动回复</label>
+                            <?php submit_button('更新 AI 状态', 'secondary', 'submit', false); ?>
+                        </form>
                         <form method="post" style="margin-bottom:16px;">
                             <?php wp_nonce_field('linkai_update_customer', 'linkai_customer_update_nonce'); ?>
                             <input type="hidden" name="conversation_id" value="<?php echo esc_attr($selected->conversation_id); ?>">
@@ -872,7 +1076,7 @@ final class LinkAI_AI_Customer_Service
                         <p><strong>会话 ID：</strong><code><?php echo esc_html($selected->conversation_id); ?></code></p>
                         <hr>
                         <?php foreach ($messages as $chat_message) : ?>
-                            <p><strong><?php echo $chat_message->role === 'user' ? '客户' : 'AI客服'; ?>：</strong><?php echo nl2br(esc_html($chat_message->content)); ?></p>
+                            <p><strong><?php echo $chat_message->role === 'user' ? '客户' : ($chat_message->role === 'human' ? '人工客服' : 'AI客服'); ?>：</strong><?php echo nl2br(esc_html($chat_message->content)); ?></p>
                         <?php endforeach; ?>
                     <?php else : ?>
                         <p>点击左侧客户可以查看完整聊天记录。</p>
@@ -1043,6 +1247,10 @@ final class LinkAI_AI_Customer_Service
                         <td><label><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[auto_render]" type="checkbox" value="1" <?php checked($options['auto_render'], '1'); ?> /> 在全站右下角自动显示</label><p class="description">也可以关闭自动显示，使用短代码 <code>[linkai_customer_service]</code> 放到指定页面。</p></td>
                     </tr>
                     <tr>
+                        <th scope="row"><label for="linkai-human-timeout">人工接管超时</label></th>
+                        <td><input id="linkai-human-timeout" name="<?php echo esc_attr(self::OPTION_NAME); ?>[human_takeover_timeout]" type="number" min="0" max="1440" step="1" value="<?php echo esc_attr((string) $options['human_takeover_timeout']); ?>" /> 分钟<p class="description">人工主动回复会暂停 AI。客户再次留言时，如果超过这个时间仍没有人工继续回复，AI 会自动恢复接待；填 0 表示一直暂停，直到后台手动恢复。</p></td>
+                    </tr>
+                    <tr>
                         <th scope="row"><label for="linkai-update-repo-url">GitHub 更新仓库</label></th>
                         <td><input id="linkai-update-repo-url" name="<?php echo esc_attr(self::OPTION_NAME); ?>[update_repo_url]" type="url" class="regular-text" placeholder="https://github.com/OSAMA-BIN-AZIZ/jinshanjiao" value="<?php echo esc_attr($options['update_repo_url']); ?>" /><p class="description">可选。填写插件所在 GitHub 仓库后，WordPress 后台「插件」页面可以检测并一键更新。</p></td>
                     </tr>
@@ -1142,6 +1350,7 @@ final class LinkAI_AI_Customer_Service
             'welcome_message' => '您好，我是金三角智能客服。您可以咨询汽车配件型号、适配车型、库存、报价和售后问题。',
             'system_prompt' => '你是金三角汽车配件网站的智能客服。请使用中文，回答要专业、简洁、友好。优先帮助用户确认配件名称、车型、年份、发动机型号、采购数量和联系方式；不确定时不要编造库存或价格，应引导用户留下联系方式，由人工客服确认。',
             'auto_render' => '1',
+            'human_takeover_timeout' => 3,
             'update_repo_url' => 'https://github.com/OSAMA-BIN-AZIZ/jinshanjiao',
             'update_branch' => 'main',
         ];
