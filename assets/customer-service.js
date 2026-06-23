@@ -60,6 +60,9 @@
         const contact = widget.querySelector('[name="contact"]');
         const history = [];
         let conversationId = window.localStorage ? window.localStorage.getItem(LinkAICustomerService.conversationStorageKey) || '' : '';
+        let lastMessageId = 0;
+        let pollTimer = null;
+        let aiPaused = false;
 
         function scrollToBottom() {
             messages.scrollTop = messages.scrollHeight;
@@ -68,6 +71,65 @@
         function addMessage(role, text, extraClass) {
             messages.appendChild(createMessage(role, text, extraClass));
             scrollToBottom();
+        }
+
+        function setAiPaused(paused) {
+            aiPaused = paused;
+            widget.classList.toggle('linkai-chat--human-takeover', paused);
+            input.placeholder = paused ? '人工客服已接管，您可以继续留言…' : '请输入您的问题，例如：你们有哪些汽车配件？';
+        }
+
+        function rememberConversation(id) {
+            if (!id) {
+                return;
+            }
+            conversationId = id;
+            if (window.localStorage) {
+                window.localStorage.setItem(LinkAICustomerService.conversationStorageKey, conversationId);
+            }
+            startPolling();
+        }
+
+        async function pollUpdates() {
+            if (!conversationId || document.hidden) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'linkai_customer_updates');
+            formData.append('nonce', LinkAICustomerService.nonce);
+            formData.append('conversation_id', conversationId);
+            formData.append('after_id', String(lastMessageId));
+
+            try {
+                const response = await fetch(LinkAICustomerService.ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+                const payload = await response.json();
+                if (!payload.success) {
+                    return;
+                }
+                setAiPaused(Boolean(payload.data.ai_paused));
+                (payload.data.messages || []).forEach(function (message) {
+                    if (message.id <= lastMessageId) {
+                        return;
+                    }
+                    addMessage(message.role || 'assistant', message.content || '', message.source === 'human' ? 'linkai-chat__message--human' : '');
+                    history.push({ role: 'assistant', content: message.content || '' });
+                    lastMessageId = message.id;
+                });
+            } catch (error) {
+                // Polling should stay quiet so it does not interrupt the visitor while waiting for a human reply.
+            }
+        }
+
+        function startPolling() {
+            if (pollTimer || !conversationId) {
+                return;
+            }
+            pollTimer = window.setInterval(pollUpdates, 8000);
         }
 
         function openPanel() {
@@ -87,6 +149,7 @@
 
         toggle.addEventListener('click', openPanel);
         close.addEventListener('click', closePanel);
+        startPolling();
 
         input.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -137,12 +200,13 @@
                 }
 
                 if (payload.data.conversation_id) {
-                    conversationId = payload.data.conversation_id;
-                    if (window.localStorage) {
-                        window.localStorage.setItem(LinkAICustomerService.conversationStorageKey, conversationId);
-                    }
+                    rememberConversation(payload.data.conversation_id);
                 }
-                addMessage('assistant', payload.data.reply);
+                if (payload.data.message_id) {
+                    lastMessageId = Math.max(lastMessageId, Number(payload.data.message_id));
+                }
+                setAiPaused(Boolean(payload.data.ai_paused));
+                addMessage('assistant', payload.data.reply, payload.data.ai_paused ? 'linkai-chat__message--human' : '');
                 history.push({ role: 'assistant', content: payload.data.reply });
             } catch (error) {
                 loading.remove();
