@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.20
+ * Version: 1.3.21
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.20';
+    private const VERSION = '1.3.21';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static $auto_widget_rendered = false;
@@ -408,7 +408,7 @@ final class LinkAI_AI_Customer_Service
             );
         }
 
-        if ($source === $target) {
+        if ($source === $target || self::is_update_source_inside_target($source, $target)) {
             return $source;
         }
 
@@ -435,15 +435,23 @@ final class LinkAI_AI_Customer_Service
         $source = untrailingslashit($source);
         $remote_source = untrailingslashit($remote_source);
 
-        if (basename($remote_source) === self::PLUGIN_DIRECTORY_NAME) {
-            return $remote_source;
-        }
-
         if (basename($source) === self::PLUGIN_DIRECTORY_NAME) {
             return $source;
         }
 
+        if (basename($remote_source) === self::PLUGIN_DIRECTORY_NAME) {
+            return $remote_source;
+        }
+
         return untrailingslashit(trailingslashit($remote_source) . self::PLUGIN_DIRECTORY_NAME);
+    }
+
+    private static function is_update_source_inside_target(string $source, string $target): bool
+    {
+        $source = untrailingslashit($source);
+        $target = untrailingslashit($target);
+
+        return $source !== $target && strpos($source, trailingslashit($target)) === 0;
     }
 
     private static function describe_update_source(string $source): string
