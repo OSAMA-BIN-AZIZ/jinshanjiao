@@ -179,3 +179,17 @@
         flex-direction: column;
     }
 }
+
+.linkai-chat--human-takeover .linkai-chat__header {
+    background: linear-gradient(135deg, #0f766e, #111827);
+}
+
+.linkai-chat--human-takeover .linkai-chat__header span::after {
+    content: " · 人工接管中";
+    font-weight: 700;
+}
+
+.linkai-chat__message--human {
+    border-left: 3px solid #0f766e;
+    box-shadow: 0 8px 20px rgba(15, 118, 110, 0.12);
+}

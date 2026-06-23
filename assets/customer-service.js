@@ -9,15 +9,37 @@
         return message;
     }
 
+    function getConfig() {
+        return window.LinkAICustomerService || {};
+    }
+
+    function readStorage(key) {
+        try {
+            return window.localStorage && key ? window.localStorage.getItem(key) || '' : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function writeStorage(key, value) {
+        try {
+            if (window.localStorage && key) {
+                window.localStorage.setItem(key, value);
+            }
+        } catch (error) {
+            // Storage can be blocked by privacy settings; chat should still work without it.
+        }
+    }
 
     function createWidgetFromConfig() {
-        if (!window.LinkAICustomerService || !LinkAICustomerService.autoRender || document.querySelector('.linkai-chat')) {
+        const config = getConfig();
+        if (!config.autoRender || document.querySelector('.linkai-chat')) {
             return null;
         }
 
         const widget = document.createElement('div');
         widget.className = 'linkai-chat';
-        widget.dataset.welcome = LinkAICustomerService.welcomeMessage || '您好，请问有什么可以帮您？';
+        widget.dataset.welcome = config.welcomeMessage || '您好，请问有什么可以帮您？';
         widget.innerHTML = `
             <button class="linkai-chat__toggle" type="button" aria-label="打开智能客服">
                 <span class="linkai-chat__toggle-icon">AI</span>
@@ -43,12 +65,17 @@
                     </div>
                 </form>
             </section>`;
-        widget.querySelector('.linkai-chat__header strong').textContent = LinkAICustomerService.assistantName || '智能客服';
+        widget.querySelector('.linkai-chat__header strong').textContent = config.assistantName || '智能客服';
         document.body.appendChild(widget);
         return widget;
     }
 
     function initChat(widget) {
+        const config = getConfig();
+        if (!config.ajaxUrl || !config.nonce) {
+            return;
+        }
+
         const toggle = widget.querySelector('.linkai-chat__toggle');
         const panel = widget.querySelector('.linkai-chat__panel');
         const close = widget.querySelector('.linkai-chat__close');
@@ -59,7 +86,12 @@
         const customerName = widget.querySelector('[name="customer_name"]');
         const contact = widget.querySelector('[name="contact"]');
         const history = [];
-        let conversationId = window.localStorage ? window.localStorage.getItem(LinkAICustomerService.conversationStorageKey) || '' : '';
+        const errorMessage = config.errorMessage || '抱歉，智能客服暂时无法连接，请稍后再试或留下联系方式。';
+        const storageKey = config.conversationStorageKey || 'linkai_customer_service_conversation_id';
+        let conversationId = readStorage(storageKey);
+        let lastMessageId = 0;
+        let pollTimer = null;
+        let aiPaused = false;
 
         function scrollToBottom() {
             messages.scrollTop = messages.scrollHeight;
@@ -68,6 +100,63 @@
         function addMessage(role, text, extraClass) {
             messages.appendChild(createMessage(role, text, extraClass));
             scrollToBottom();
+        }
+
+        function setAiPaused(paused) {
+            aiPaused = paused;
+            widget.classList.toggle('linkai-chat--human-takeover', paused);
+            input.placeholder = paused ? '人工客服已接管，您可以继续留言…' : '请输入您的问题，例如：你们有哪些汽车配件？';
+        }
+
+        function rememberConversation(id) {
+            if (!id) {
+                return;
+            }
+            conversationId = id;
+            writeStorage(storageKey, conversationId);
+            startPolling();
+        }
+
+        async function pollUpdates() {
+            if (!conversationId || document.hidden) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'linkai_customer_updates');
+            formData.append('nonce', config.nonce || '');
+            formData.append('conversation_id', conversationId);
+            formData.append('after_id', String(lastMessageId));
+
+            try {
+                const response = await fetch(config.ajaxUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+                const payload = await response.json();
+                if (!payload.success) {
+                    return;
+                }
+                setAiPaused(Boolean(payload.data.ai_paused));
+                (payload.data.messages || []).forEach(function (message) {
+                    if (message.id <= lastMessageId) {
+                        return;
+                    }
+                    addMessage(message.role || 'assistant', message.content || '', message.source === 'human' ? 'linkai-chat__message--human' : '');
+                    history.push({ role: 'assistant', content: message.content || '' });
+                    lastMessageId = message.id;
+                });
+            } catch (error) {
+                // Polling should stay quiet so it does not interrupt the visitor while waiting for a human reply.
+            }
+        }
+
+        function startPolling() {
+            if (pollTimer || !conversationId) {
+                return;
+            }
+            pollTimer = window.setInterval(pollUpdates, 8000);
         }
 
         function openPanel() {
@@ -87,6 +176,7 @@
 
         toggle.addEventListener('click', openPanel);
         close.addEventListener('click', closePanel);
+        startPolling();
 
         input.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -116,7 +206,7 @@
 
             const formData = new FormData();
             formData.append('action', 'linkai_customer_chat');
-            formData.append('nonce', LinkAICustomerService.nonce);
+            formData.append('nonce', config.nonce || '');
             formData.append('message', question);
             formData.append('history', JSON.stringify(history.slice(0, -1)));
             formData.append('conversation_id', conversationId);
@@ -124,7 +214,7 @@
             formData.append('contact', contact.value.trim());
 
             try {
-                const response = await fetch(LinkAICustomerService.ajaxUrl, {
+                const response = await fetch(config.ajaxUrl, {
                     method: 'POST',
                     credentials: 'same-origin',
                     body: formData,
@@ -133,20 +223,21 @@
                 loading.remove();
 
                 if (!payload.success) {
-                    throw new Error(payload.data && payload.data.message ? payload.data.message : LinkAICustomerService.errorMessage);
+                    throw new Error(payload.data && payload.data.message ? payload.data.message : errorMessage);
                 }
 
                 if (payload.data.conversation_id) {
-                    conversationId = payload.data.conversation_id;
-                    if (window.localStorage) {
-                        window.localStorage.setItem(LinkAICustomerService.conversationStorageKey, conversationId);
-                    }
+                    rememberConversation(payload.data.conversation_id);
                 }
-                addMessage('assistant', payload.data.reply);
+                if (payload.data.message_id) {
+                    lastMessageId = Math.max(lastMessageId, Number(payload.data.message_id));
+                }
+                setAiPaused(Boolean(payload.data.ai_paused));
+                addMessage('assistant', payload.data.reply, payload.data.ai_paused ? 'linkai-chat__message--human' : '');
                 history.push({ role: 'assistant', content: payload.data.reply });
             } catch (error) {
                 loading.remove();
-                addMessage('assistant', error.message || LinkAICustomerService.errorMessage);
+                addMessage('assistant', error.message || errorMessage);
             } finally {
                 input.disabled = false;
                 send.disabled = false;
