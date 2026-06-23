@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.18
+ * Version: 1.3.20
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -17,7 +17,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.18';
+    private const VERSION = '1.3.20';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static $auto_widget_rendered = false;
@@ -47,7 +47,9 @@ final class LinkAI_AI_Customer_Service
     public static function activate(): void
     {
         self::create_customer_tables();
-        self::maybe_upgrade_customer_tables();
+        if (method_exists(__CLASS__, 'maybe_upgrade_customer_tables')) {
+            self::maybe_upgrade_customer_tables();
+        }
     }
 
     private static function create_customer_tables(): void
@@ -583,7 +585,7 @@ final class LinkAI_AI_Customer_Service
             plugins_url('assets/customer-service.js', __FILE__),
             [],
             self::VERSION,
-            false
+            true
         );
 
         if (self::get_options()['auto_render'] === '1') {
