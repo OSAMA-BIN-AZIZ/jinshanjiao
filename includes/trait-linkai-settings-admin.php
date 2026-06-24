@@ -61,6 +61,33 @@ trait LinkAI_Settings_Admin
             'linkai-customer-records',
             [__CLASS__, 'render_customer_records_page']
         );
+
+        add_submenu_page(
+            'linkai-ai-customer-service',
+            'LinkAI 触发器',
+            '触发器',
+            'manage_options',
+            'linkai-triggers',
+            [__CLASS__, 'render_triggers_page']
+        );
+
+        add_submenu_page(
+            'linkai-ai-customer-service',
+            'LinkAI 知识库',
+            '知识库',
+            'manage_options',
+            'linkai-knowledge-base',
+            [__CLASS__, 'render_knowledge_base_page']
+        );
+
+        add_submenu_page(
+            'linkai-ai-customer-service',
+            'LinkAI 报表',
+            '报表',
+            'manage_options',
+            'linkai-reports',
+            [__CLASS__, 'render_reports_page']
+        );
     }
 
     private static function settings_page_url(): string

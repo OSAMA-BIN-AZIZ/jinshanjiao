@@ -480,10 +480,13 @@ trait LinkAI_Admin_Ajax
     private static function customer_statuses(): array
     {
         return [
+            'open' => '处理中',
+            'pending' => '待客户回复',
+            'solved' => '已解决',
+            'closed' => '已关闭',
             'new' => '新客户',
             'contacted' => '已联系',
             'quoted' => '已报价',
-            'closed' => '已成交',
             'invalid' => '无效',
         ];
     }

@@ -98,3 +98,6 @@ WordPress 更新会自动下载 ZIP 并解压。这个提示通常表示 ZIP 包
 = 1.3.0 =
 * 增加客户管理、跟进状态和备注。
 * 改进 GitHub 更新目录处理。
+
+== LinkAI tawk.to parity roadmap ==
+Current builds include realtime workspace, online visitors, human takeover, business hours/offline messages, triggers, knowledge base, reports, basic ticket states, attachments and PWA manifest. See README.md and TODO.md for the current roadmap and remaining differences from a full tawk.to-like SaaS platform.

@@ -69,6 +69,7 @@
                     </div>
                     <div class="linkai-chat__composer">
                         <textarea class="linkai-chat__input" name="message" rows="1" placeholder="请输入您的问题，例如：你们有哪些汽车配件？" required></textarea>
+                        <input class="linkai-chat__attachment" name="attachment" type="file" accept="image/*,.pdf" aria-label="上传附件">
                         <button class="linkai-chat__send" type="submit">发送</button>
                     </div>
                 </form>
@@ -92,6 +93,7 @@
         const form = widget.querySelector('.linkai-chat__form');
         const input = widget.querySelector('.linkai-chat__input');
         const send = widget.querySelector('.linkai-chat__send');
+        const attachment = widget.querySelector('.linkai-chat__attachment');
         const customerName = widget.querySelector('[name="customer_name"]');
         const contact = widget.querySelector('[name="contact"]');
         const history = [];
@@ -259,6 +261,28 @@
             pollTimer = window.setInterval(pollUpdates, 8000);
         }
 
+        function scheduleTriggers() {
+            (config.triggers || []).forEach(function(trigger){
+                const urlMatch = !trigger.url_contains || window.location.href.indexOf(trigger.url_contains) !== -1;
+                if (!urlMatch || !trigger.message) { return; }
+                const key = 'linkai_trigger_' + trigger.id;
+                if (readStorage(key)) { return; }
+                window.setTimeout(function(){
+                    if (readStorage(key)) { return; }
+                    addMessage('assistant', trigger.message);
+                    writeStorage(key, '1');
+                    if (conversationId) {
+                        const formData = new FormData();
+                        formData.append('action', 'linkai_customer_trigger');
+                        formData.append('nonce', config.nonce || '');
+                        formData.append('conversation_id', conversationId);
+                        formData.append('message', trigger.message);
+                        fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: formData }).catch(function(){});
+                    }
+                }, Math.max(1, Number(trigger.delay_seconds || 8)) * 1000);
+            });
+        }
+
         function openPanel() {
             panel.hidden = false;
             toggle.hidden = true;
@@ -279,6 +303,7 @@
         startPolling();
         sendPresence();
         window.setInterval(sendPresence, 20000);
+        scheduleTriggers();
 
         input.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -326,6 +351,9 @@
             formData.append('conversation_id', conversationId);
             formData.append('customer_name', customerName.value.trim());
             formData.append('contact', contact.value.trim());
+            if (attachment && attachment.files && attachment.files[0]) {
+                formData.append('attachment', attachment.files[0]);
+            }
 
             try {
                 const response = await fetch(config.ajaxUrl, {
@@ -361,6 +389,7 @@
                 send.disabled = false;
                 customerName.disabled = false;
                 contact.disabled = false;
+                if (attachment) { attachment.value = ''; }
                 input.focus();
             }
         });

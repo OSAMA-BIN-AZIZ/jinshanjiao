@@ -215,3 +215,22 @@
     cursor: pointer;
     font: inherit;
 }
+
+.linkai-chat__attachment {
+    max-width: 92px;
+    font-size: 12px;
+}
+
+@media (max-width: 782px) {
+    .linkai-chat {
+        right: 12px;
+        bottom: 12px;
+    }
+    .linkai-chat__panel {
+        width: calc(100vw - 24px);
+        height: min(640px, calc(100vh - 24px));
+    }
+    .linkai-chat__composer {
+        flex-wrap: wrap;
+    }
+}

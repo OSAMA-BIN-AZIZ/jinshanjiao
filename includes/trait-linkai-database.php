@@ -16,6 +16,9 @@ trait LinkAI_Database
         $visitors_table = self::visitors_table();
         $pageviews_table = self::visitor_pageviews_table();
         $canned_replies_table = self::canned_replies_table();
+        $triggers_table = self::triggers_table();
+        $knowledge_base_table = self::knowledge_base_table();
+        $kb_logs_table = self::kb_search_logs_table();
 
         dbDelta("CREATE TABLE {$customers_table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -111,6 +114,44 @@ trait LinkAI_Database
             KEY visited_at (visited_at)
         ) {$charset_collate};");
 
+
+
+        dbDelta("CREATE TABLE {$triggers_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            title varchar(120) NOT NULL DEFAULT '',
+            url_contains varchar(255) NOT NULL DEFAULT '',
+            delay_seconds int(11) NOT NULL DEFAULT 8,
+            message text NOT NULL,
+            is_active tinyint(1) NOT NULL DEFAULT 1,
+            created_at datetime NOT NULL,
+            updated_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY is_active (is_active),
+            KEY url_contains (url_contains)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$knowledge_base_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            title varchar(180) NOT NULL DEFAULT '',
+            keywords varchar(255) NOT NULL DEFAULT '',
+            content longtext NOT NULL,
+            is_active tinyint(1) NOT NULL DEFAULT 1,
+            created_at datetime NOT NULL,
+            updated_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY is_active (is_active),
+            KEY updated_at (updated_at)
+        ) {$charset_collate};");
+
+        dbDelta("CREATE TABLE {$kb_logs_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            query_text varchar(255) NOT NULL DEFAULT '',
+            results_count int(11) NOT NULL DEFAULT 0,
+            created_at datetime NOT NULL,
+            PRIMARY KEY  (id),
+            KEY created_at (created_at)
+        ) {$charset_collate};");
+
         dbDelta("CREATE TABLE {$canned_replies_table} (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
             title varchar(120) NOT NULL,
@@ -182,6 +223,28 @@ trait LinkAI_Database
                 $wpdb->query($sql);
             }
         }
+    }
+
+
+    private static function triggers_table(): string
+    {
+        global $wpdb;
+
+        return $wpdb->prefix . 'linkai_triggers';
+    }
+
+    private static function knowledge_base_table(): string
+    {
+        global $wpdb;
+
+        return $wpdb->prefix . 'linkai_knowledge_base';
+    }
+
+    private static function kb_search_logs_table(): string
+    {
+        global $wpdb;
+
+        return $wpdb->prefix . 'linkai_kb_search_logs';
     }
 
     private static function canned_replies_table(): string

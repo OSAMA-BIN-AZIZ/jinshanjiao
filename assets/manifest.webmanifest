@@ -1,0 +1,9 @@
+{
+  "name": "LinkAI 客服工作台",
+  "short_name": "LinkAI",
+  "start_url": "/wp-admin/admin.php?page=linkai-realtime-workspace",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#d71920",
+  "icons": []
+}

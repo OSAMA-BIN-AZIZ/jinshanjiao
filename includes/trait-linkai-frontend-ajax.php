@@ -167,6 +167,10 @@ trait LinkAI_Frontend_Ajax
         if ($options['require_contact'] === '1' && $contact === '') {
             wp_send_json_error(['message' => '请先留下电话或微信，方便客服继续跟进。'], 400);
         }
+        $attachment_note = self::handle_chat_attachment_upload();
+        if ($attachment_note !== '') {
+            $message .= "\n\n" . $attachment_note;
+        }
 
         $reception_state = self::get_reception_state();
         if (empty($reception_state['is_online'])) {
@@ -195,7 +199,15 @@ trait LinkAI_Frontend_Ajax
 
         $messages = [];
         if (!empty($options['system_prompt'])) {
-            $messages[] = ['role' => 'system', 'content' => $options['system_prompt']];
+            $system_prompt = $options['system_prompt'];
+            $kb_matches = self::find_knowledge_base_matches($message);
+            if (!empty($kb_matches)) {
+                $system_prompt .= "\n\n以下是站内知识库内容，请优先引用，不要编造：";
+                foreach ($kb_matches as $kb_match) {
+                    $system_prompt .= "\n- " . $kb_match['title'] . '：' . wp_strip_all_tags($kb_match['content']);
+                }
+            }
+            $messages[] = ['role' => 'system', 'content' => $system_prompt];
         }
 
         foreach (array_slice($history, -8) as $item) {
@@ -274,6 +286,30 @@ trait LinkAI_Frontend_Ajax
             'reception_state' => $reception_state,
             'suggested_questions' => $data['suggested_questions'] ?? [],
         ]);
+    }
+
+
+    private static function handle_chat_attachment_upload(): string
+    {
+        if (empty($_FILES['attachment']) || !is_array($_FILES['attachment'])) {
+            return '';
+        }
+        $file = $_FILES['attachment'];
+        if (!empty($file['error'])) {
+            return '';
+        }
+        $allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        $file_type = isset($file['type']) ? sanitize_mime_type((string) $file['type']) : '';
+        $file_size = isset($file['size']) ? (int) $file['size'] : 0;
+        if (!in_array($file_type, $allowed_types, true) || $file_size > 5 * MB_IN_BYTES) {
+            return '';
+        }
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        $uploaded = wp_handle_upload($file, ['test_form' => false]);
+        if (empty($uploaded['url'])) {
+            return '';
+        }
+        return '附件：' . esc_url_raw($uploaded['url']);
     }
 
     private static function record_customer_question(string $conversation_id, string $customer_name, string $contact, string $message): array

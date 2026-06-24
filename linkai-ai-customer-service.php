@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.40
+ * Version: 1.3.41
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -22,6 +22,7 @@ require_once __DIR__ . '/includes/trait-linkai-admin-ajax.php';
 require_once __DIR__ . '/includes/trait-linkai-settings-admin.php';
 require_once __DIR__ . '/includes/trait-linkai-export.php';
 require_once __DIR__ . '/includes/trait-linkai-updater.php';
+require_once __DIR__ . '/includes/trait-linkai-parity-features.php';
 
 final class LinkAI_AI_Customer_Service
 {
@@ -35,11 +36,12 @@ final class LinkAI_AI_Customer_Service
     use LinkAI_Settings_Admin;
     use LinkAI_Export;
     use LinkAI_Updater;
+    use LinkAI_Parity_Features;
 
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.40';
+    private const VERSION = '1.3.41';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static $auto_widget_rendered = false;
@@ -51,12 +53,14 @@ final class LinkAI_AI_Customer_Service
         add_action('admin_init', [__CLASS__, 'register_settings']);
         add_action('admin_init', [__CLASS__, 'handle_update_cache_clear']);
         add_action('admin_init', [__CLASS__, 'handle_permission_fix']);
+        add_action('admin_init', [__CLASS__, 'handle_parity_admin_forms']);
         add_action('admin_post_linkai_export_customers', [__CLASS__, 'handle_export_customers_request']);
         add_action('admin_post_linkai_export_conversation', [__CLASS__, 'handle_export_conversation_request']);
         add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_admin_assets']);
         add_action('wp_body_open', [__CLASS__, 'render_chat_widget'], 99);
         add_action('wp_footer', [__CLASS__, 'render_chat_widget'], 99);
+        add_action('wp_head', [__CLASS__, 'render_pwa_manifest_link']);
         add_shortcode('linkai_customer_service', [__CLASS__, 'render_shortcode']);
         add_action('wp_ajax_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
         add_action('wp_ajax_nopriv_linkai_customer_chat', [__CLASS__, 'handle_chat_request']);
@@ -66,6 +70,8 @@ final class LinkAI_AI_Customer_Service
         add_action('wp_ajax_nopriv_linkai_customer_presence', [__CLASS__, 'handle_presence_request']);
         add_action('wp_ajax_linkai_customer_satisfaction', [__CLASS__, 'handle_satisfaction_request']);
         add_action('wp_ajax_nopriv_linkai_customer_satisfaction', [__CLASS__, 'handle_satisfaction_request']);
+        add_action('wp_ajax_linkai_customer_trigger', [__CLASS__, 'handle_trigger_event_request']);
+        add_action('wp_ajax_nopriv_linkai_customer_trigger', [__CLASS__, 'handle_trigger_event_request']);
         add_action('wp_ajax_linkai_admin_online_visitors', [__CLASS__, 'handle_admin_online_visitors_request']);
         add_action('wp_ajax_linkai_admin_visitor_path', [__CLASS__, 'handle_admin_visitor_path_request']);
         add_action('wp_ajax_linkai_admin_conversations', [__CLASS__, 'handle_admin_conversations_request']);
@@ -89,6 +95,7 @@ final class LinkAI_AI_Customer_Service
         if (method_exists(__CLASS__, 'maybe_upgrade_customer_tables')) {
             self::maybe_upgrade_customer_tables();
         }
+        self::ensure_linkai_capabilities();
     }
 
 
@@ -216,6 +223,7 @@ final class LinkAI_AI_Customer_Service
             'offlineMessage' => $options['offline_status_message'],
             'requireContact' => $options['require_contact'] === '1',
             'contactRequiredMessage' => '请先留下电话或微信，方便客服继续跟进。',
+            'triggers' => self::get_active_triggers(),
         ]);
     }
 
