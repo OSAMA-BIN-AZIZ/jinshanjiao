@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkAI 智能 AI 客服
  * Description: 为网站添加一个可配置的 LinkAI 智能客服悬浮聊天窗口，支持短代码与 WordPress AJAX 服务端代理。
- * Version: 1.3.39
+ * Version: 1.3.40
  * Author: Jinshanjiao
  * License: GPL-2.0-or-later
  * Text Domain: linkai-ai-customer-service
@@ -39,7 +39,7 @@ final class LinkAI_AI_Customer_Service
     private const OPTION_NAME = 'linkai_ai_customer_service_options';
     private const NONCE_ACTION = 'linkai_ai_customer_service_chat';
     private const API_ENDPOINT = 'https://api.link-ai.tech/v1/chat/completions';
-    private const VERSION = '1.3.39';
+    private const VERSION = '1.3.40';
     private const PLUGIN_FILE = __FILE__;
     private const PLUGIN_DIRECTORY_NAME = 'jinshanjiao-main';
     private static $auto_widget_rendered = false;
@@ -64,6 +64,8 @@ final class LinkAI_AI_Customer_Service
         add_action('wp_ajax_nopriv_linkai_customer_updates', [__CLASS__, 'handle_updates_request']);
         add_action('wp_ajax_linkai_customer_presence', [__CLASS__, 'handle_presence_request']);
         add_action('wp_ajax_nopriv_linkai_customer_presence', [__CLASS__, 'handle_presence_request']);
+        add_action('wp_ajax_linkai_customer_satisfaction', [__CLASS__, 'handle_satisfaction_request']);
+        add_action('wp_ajax_nopriv_linkai_customer_satisfaction', [__CLASS__, 'handle_satisfaction_request']);
         add_action('wp_ajax_linkai_admin_online_visitors', [__CLASS__, 'handle_admin_online_visitors_request']);
         add_action('wp_ajax_linkai_admin_visitor_path', [__CLASS__, 'handle_admin_visitor_path_request']);
         add_action('wp_ajax_linkai_admin_conversations', [__CLASS__, 'handle_admin_conversations_request']);
@@ -161,10 +163,11 @@ final class LinkAI_AI_Customer_Service
     {
         self::enqueue_widget_assets();
         $options = self::get_options();
+        $reception_state = self::get_reception_state();
 
         ob_start();
         ?>
-        <div class="linkai-chat" data-welcome="<?php echo esc_attr($options['welcome_message']); ?>">
+        <div class="linkai-chat <?php echo $reception_state['is_online'] ? '' : 'linkai-chat--offline'; ?>" data-welcome="<?php echo esc_attr($reception_state['message']); ?>">
             <button class="linkai-chat__toggle" type="button" aria-label="打开智能客服">
                 <span class="linkai-chat__toggle-icon">AI</span>
                 <span class="linkai-chat__toggle-text">在线客服</span>
@@ -173,7 +176,7 @@ final class LinkAI_AI_Customer_Service
                 <header class="linkai-chat__header">
                     <div>
                         <strong><?php echo esc_html($options['assistant_name']); ?></strong>
-                        <span>通常几秒内回复</span>
+                        <span><?php echo esc_html($reception_state['label']); ?></span>
                     </div>
                     <button class="linkai-chat__close" type="button" aria-label="关闭智能客服">×</button>
                 </header>
@@ -199,6 +202,7 @@ final class LinkAI_AI_Customer_Service
         wp_enqueue_style('linkai-ai-customer-service');
         wp_enqueue_script('linkai-ai-customer-service');
         $options = self::get_options();
+        $reception_state = self::get_reception_state();
         wp_localize_script('linkai-ai-customer-service', 'LinkAICustomerService', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce(self::NONCE_ACTION),
@@ -207,7 +211,9 @@ final class LinkAI_AI_Customer_Service
             'visitorStorageKey' => 'linkai_customer_service_visitor_id',
             'autoRender' => $options['auto_render'] === '1',
             'assistantName' => $options['assistant_name'],
-            'welcomeMessage' => $options['welcome_message'],
+            'welcomeMessage' => $reception_state['message'],
+            'receptionState' => $reception_state,
+            'offlineMessage' => $options['offline_status_message'],
             'requireContact' => $options['require_contact'] === '1',
             'contactRequiredMessage' => '请先留下电话或微信，方便客服继续跟进。',
         ]);

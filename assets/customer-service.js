@@ -45,8 +45,9 @@
         }
 
         const widget = document.createElement('div');
-        widget.className = 'linkai-chat';
-        widget.dataset.welcome = config.welcomeMessage || '您好，请问有什么可以帮您？';
+        const receptionState = config.receptionState || {};
+        widget.className = 'linkai-chat' + (receptionState.is_online === false ? ' linkai-chat--offline' : '');
+        widget.dataset.welcome = config.welcomeMessage || receptionState.message || '您好，请问有什么可以帮您？';
         widget.innerHTML = `
             <button class="linkai-chat__toggle" type="button" aria-label="打开智能客服">
                 <span class="linkai-chat__toggle-icon">AI</span>
@@ -56,7 +57,7 @@
                 <header class="linkai-chat__header">
                     <div>
                         <strong></strong>
-                        <span>通常几秒内回复</span>
+                        <span></span>
                     </div>
                     <button class="linkai-chat__close" type="button" aria-label="关闭智能客服">×</button>
                 </header>
@@ -73,6 +74,7 @@
                 </form>
             </section>`;
         widget.querySelector('.linkai-chat__header strong').textContent = config.assistantName || '智能客服';
+        widget.querySelector('.linkai-chat__header span').textContent = receptionState.label || '在线接待中';
         document.body.appendChild(widget);
         return widget;
     }
@@ -103,25 +105,77 @@
         let lastMessageId = 0;
         let pollTimer = null;
         let aiPaused = false;
+        let serviceOnline = !(config.receptionState && config.receptionState.is_online === false);
 
         if (config.requireContact && contact) {
             contact.required = true;
             contact.placeholder = '电话/微信（必填）';
         }
+        setServiceOnline(serviceOnline, config.welcomeMessage || '', (config.receptionState && config.receptionState.label) || '在线接待中');
 
         function scrollToBottom() {
             messages.scrollTop = messages.scrollHeight;
         }
 
         function addMessage(role, text, extraClass) {
-            messages.appendChild(createMessage(role, text, extraClass));
+            const messageEl = createMessage(role, text, extraClass);
+            messages.appendChild(messageEl);
             scrollToBottom();
+            return messageEl;
+        }
+
+        function addSatisfactionPrompt() {
+            if (!conversationId || messages.querySelector('.linkai-chat__satisfaction')) {
+                return;
+            }
+            const prompt = document.createElement('div');
+            prompt.className = 'linkai-chat__satisfaction';
+            prompt.innerHTML = '<span>这次回复有帮助吗？</span><button type="button" data-score="5">有帮助</button><button type="button" data-score="1">没帮助</button>';
+            messages.appendChild(prompt);
+            scrollToBottom();
+        }
+
+        async function sendSatisfaction(score, container) {
+            if (!conversationId) { return; }
+            const formData = new FormData();
+            formData.append('action', 'linkai_customer_satisfaction');
+            formData.append('nonce', config.nonce || '');
+            formData.append('conversation_id', conversationId);
+            formData.append('score', String(score));
+            try {
+                const response = await fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: formData });
+                const payload = await response.json();
+                container.textContent = payload.success ? '感谢您的反馈。' : '评价暂时无法保存。';
+            } catch (error) {
+                container.textContent = '评价暂时无法保存。';
+            }
         }
 
         function setAiPaused(paused) {
             aiPaused = paused;
             widget.classList.toggle('linkai-chat--human-takeover', paused);
-            input.placeholder = paused ? '人工客服已接管，您可以继续留言…' : '请输入您的问题，例如：你们有哪些汽车配件？';
+            updateInputPlaceholder();
+        }
+
+        function setServiceOnline(online, message, label) {
+            serviceOnline = online;
+            widget.classList.toggle('linkai-chat--offline', !online);
+            if (message) {
+                widget.dataset.welcome = message;
+            }
+            const status = widget.querySelector('.linkai-chat__header span');
+            if (status && label) {
+                status.textContent = label;
+            }
+            updateInputPlaceholder();
+        }
+
+        function updateInputPlaceholder() {
+            if (!serviceOnline) {
+                input.placeholder = '当前离线，请留言并留下联系方式…';
+                return;
+            }
+            input.placeholder = aiPaused ? '人工客服已接管，您可以继续留言…' : '请输入您的问题，例如：你们有哪些汽车配件？';
         }
 
         function rememberConversation(id) {
@@ -181,6 +235,9 @@
                     return;
                 }
                 setAiPaused(Boolean(payload.data.ai_paused));
+                if (payload.data.reception_state) {
+                    setServiceOnline(Boolean(payload.data.reception_state.is_online), payload.data.reception_state.message || '', payload.data.reception_state.label || '');
+                }
                 (payload.data.messages || []).forEach(function (message) {
                     if (message.id <= lastMessageId) {
                         return;
@@ -188,6 +245,7 @@
                     addMessage(message.role || 'assistant', message.content || '', message.source === 'human' ? 'linkai-chat__message--human' : '');
                     history.push({ role: 'assistant', content: message.content || '' });
                     lastMessageId = message.id;
+                    addSatisfactionPrompt();
                 });
             } catch (error) {
                 // Polling should stay quiet so it does not interrupt the visitor while waiting for a human reply.
@@ -227,6 +285,13 @@
                 event.preventDefault();
                 form.requestSubmit();
             }
+        });
+
+        messages.addEventListener('click', function (event) {
+            const button = event.target.closest('.linkai-chat__satisfaction button');
+            if (!button) { return; }
+            const container = button.closest('.linkai-chat__satisfaction');
+            sendSatisfaction(Number(button.dataset.score || 0), container);
         });
 
         form.addEventListener('submit', async function (event) {
@@ -282,8 +347,12 @@
                     lastMessageId = Math.max(lastMessageId, Number(payload.data.message_id));
                 }
                 setAiPaused(Boolean(payload.data.ai_paused));
-                addMessage('assistant', payload.data.reply, payload.data.ai_paused ? 'linkai-chat__message--human' : '');
+                if (payload.data.reception_state) {
+                    setServiceOnline(Boolean(payload.data.reception_state.is_online), payload.data.reception_state.message || '', payload.data.reception_state.label || '');
+                }
+                addMessage('assistant', payload.data.reply, payload.data.ai_paused || payload.data.offline ? 'linkai-chat__message--human' : '');
                 history.push({ role: 'assistant', content: payload.data.reply });
+                addSatisfactionPrompt();
             } catch (error) {
                 loading.remove();
                 addMessage('assistant', error.message || errorMessage);

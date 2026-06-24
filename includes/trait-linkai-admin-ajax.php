@@ -85,11 +85,12 @@ trait LinkAI_Admin_Ajax
         self::maybe_upgrade_customer_tables();
 
         $customers_table = self::customers_table();
-        $customers = $wpdb->get_results("SELECT id, conversation_id, customer_name, contact, ip_address, country, device, last_message, last_reply, status, ai_paused, unread_count, last_customer_message_at, last_staff_reply_at, assigned_user_id, assigned_at, closed_at, priority, tags, follow_up_at, notes, updated_at FROM {$customers_table} ORDER BY updated_at DESC LIMIT 100", ARRAY_A);
+        $customers = $wpdb->get_results("SELECT id, conversation_id, customer_name, contact, ip_address, country, device, last_message, last_reply, status, ai_paused, unread_count, last_customer_message_at, last_staff_reply_at, assigned_user_id, assigned_at, closed_at, priority, tags, follow_up_at, notes, satisfaction_score, satisfaction_comment, satisfaction_at, updated_at FROM {$customers_table} ORDER BY updated_at DESC LIMIT 100", ARRAY_A);
 
         wp_send_json_success([
             'conversations' => array_map([__CLASS__, 'format_admin_conversation'], $customers ?: []),
             'server_time' => current_time('mysql'),
+            'reception_state' => self::get_reception_state(),
         ]);
     }
 
@@ -414,8 +415,23 @@ trait LinkAI_Admin_Ajax
             'tag_list' => self::split_customer_tags((string) ($customer['tags'] ?? '')),
             'follow_up_at' => (string) ($customer['follow_up_at'] ?? ''),
             'notes' => (string) ($customer['notes'] ?? ''),
+            'satisfaction_score' => (int) ($customer['satisfaction_score'] ?? 0),
+            'satisfaction_label' => self::satisfaction_label((int) ($customer['satisfaction_score'] ?? 0)),
+            'satisfaction_comment' => (string) ($customer['satisfaction_comment'] ?? ''),
+            'satisfaction_at' => (string) ($customer['satisfaction_at'] ?? ''),
             'updated_at' => (string) ($customer['updated_at'] ?? ''),
         ];
+    }
+
+    private static function satisfaction_label(int $score): string
+    {
+        if ($score >= 5) {
+            return '满意';
+        }
+        if ($score > 0) {
+            return '不满意';
+        }
+        return '未评价';
     }
 
     private static function get_user_display_name(int $user_id): string

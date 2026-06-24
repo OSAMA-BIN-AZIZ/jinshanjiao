@@ -15,10 +15,13 @@ trait LinkAI_Workspace_Admin
         self::maybe_upgrade_customer_tables();
         $nonce = wp_create_nonce('linkai_admin_workspace');
         $agents = self::get_workspace_agents();
+        $options = self::get_options();
+        $reception_state = self::get_reception_state();
         ?>
-        <div class="wrap linkai-workspace" data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>" data-nonce="<?php echo esc_attr($nonce); ?>" data-agents="<?php echo esc_attr(wp_json_encode($agents)); ?>">
+        <div class="wrap linkai-workspace" data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>" data-nonce="<?php echo esc_attr($nonce); ?>" data-agents="<?php echo esc_attr(wp_json_encode($agents)); ?>" data-browser-notifications="<?php echo esc_attr($options['browser_notifications']); ?>">
             <h1>LinkAI 实时工作台</h1>
             <p>左侧选择会话，中间实时查看并发送人工回复，右侧管理客户资料与 AI 接管状态。</p>
+            <p class="notice notice-info linkai-workspace__status" data-linkai-reception-status><?php echo esc_html($reception_state['label'] . '：' . $reception_state['message']); ?></p>
             <div class="linkai-workspace__grid">
                 <aside class="linkai-workspace__sidebar">
                     <div class="linkai-workspace__toolbar">

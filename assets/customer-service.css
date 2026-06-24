@@ -193,3 +193,25 @@
     border-left: 3px solid #0f766e;
     box-shadow: 0 8px 20px rgba(15, 118, 110, 0.12);
 }
+
+.linkai-chat--offline .linkai-chat__header {
+    background: linear-gradient(135deg, #334155, #64748b);
+}
+
+.linkai-chat__satisfaction {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    color: #475569;
+    font-size: 13px;
+}
+
+.linkai-chat__satisfaction button {
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: #fff;
+    cursor: pointer;
+    font: inherit;
+}

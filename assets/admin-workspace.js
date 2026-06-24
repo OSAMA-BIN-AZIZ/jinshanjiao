@@ -5,10 +5,12 @@
     const nonce = root.dataset.nonce;
     let agents = [];
     try { agents = JSON.parse(root.dataset.agents || '[]'); } catch (error) { agents = []; }
+    const browserNotificationsEnabled = root.dataset.browserNotifications === '1';
     const conversationsEl = root.querySelector('[data-linkai-conversations]');
     const messagesEl = root.querySelector('[data-linkai-messages]');
     const headerEl = root.querySelector('[data-linkai-chat-header]');
     const profileEl = root.querySelector('[data-linkai-profile]');
+    const receptionStatusEl = root.querySelector('[data-linkai-reception-status]');
     const replyForm = root.querySelector('[data-linkai-reply-form]');
     const replyInput = root.querySelector('[data-linkai-reply]');
     const cannedRepliesEl = root.querySelector('[data-linkai-canned-replies]');
@@ -56,7 +58,7 @@
     }
 
     function notifyNewMessages(count) {
-        if (count <= 0) { return; }
+        if (count <= 0 || !browserNotificationsEnabled) { return; }
         playNewMessageSound();
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('LinkAI 新消息', { body: count + ' 条客户消息待处理' });
@@ -119,6 +121,9 @@
         return post('linkai_admin_conversations', {}).then(function(payload){
             if (!payload.success) { throw new Error(payload.data && payload.data.message ? payload.data.message : '会话加载失败'); }
             conversations = payload.data.conversations || [];
+            if (receptionStatusEl && payload.data.reception_state) {
+                receptionStatusEl.textContent = (payload.data.reception_state.label || '') + '：' + (payload.data.reception_state.message || '');
+            }
             const unreadTotal = conversations.reduce(function(total, item){ return total + Number(item.unread_count || 0); }, 0);
             if (hasLoadedConversations && unreadTotal > lastUnreadTotal) {
                 notifyNewMessages(unreadTotal - lastUnreadTotal);
@@ -199,7 +204,7 @@
     });
 
     root.querySelector('[data-linkai-refresh]').addEventListener('click', function(){
-        if ('Notification' in window && Notification.permission === 'default') {
+        if (browserNotificationsEnabled && 'Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
         loadConversations().then(loadMessages);

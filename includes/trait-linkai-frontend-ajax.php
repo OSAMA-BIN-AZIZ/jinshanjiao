@@ -63,6 +63,42 @@ trait LinkAI_Frontend_Ajax
         wp_send_json_success(['visitor_id' => $visitor_id]);
     }
 
+
+    public static function handle_satisfaction_request(): void
+    {
+        check_ajax_referer(self::NONCE_ACTION, 'nonce');
+
+        global $wpdb;
+        self::create_customer_tables();
+        self::maybe_upgrade_customer_tables();
+
+        $conversation_id = isset($_POST['conversation_id']) ? sanitize_key(wp_unslash($_POST['conversation_id'])) : '';
+        $score = isset($_POST['score']) ? (int) $_POST['score'] : 0;
+        $comment = isset($_POST['comment']) ? sanitize_text_field(wp_unslash($_POST['comment'])) : '';
+        if ($conversation_id === '' || !in_array($score, [1, 5], true)) {
+            wp_send_json_error(['message' => '评价参数无效。'], 400);
+        }
+
+        $updated = $wpdb->update(
+            self::customers_table(),
+            [
+                'satisfaction_score' => $score,
+                'satisfaction_comment' => $comment,
+                'satisfaction_at' => current_time('mysql'),
+                'updated_at' => current_time('mysql'),
+            ],
+            ['conversation_id' => $conversation_id],
+            ['%d', '%s', '%s', '%s'],
+            ['%s']
+        );
+
+        if ($updated === false) {
+            wp_send_json_error(['message' => '评价保存失败。'], 500);
+        }
+
+        wp_send_json_success(['message' => '感谢您的反馈。']);
+    }
+
     public static function handle_updates_request(): void
     {
         check_ajax_referer(self::NONCE_ACTION, 'nonce');
@@ -96,6 +132,7 @@ trait LinkAI_Frontend_Ajax
         wp_send_json_success([
             'messages' => array_map([__CLASS__, 'format_frontend_message'], $messages),
             'ai_paused' => !empty($customer->ai_paused),
+            'reception_state' => self::get_reception_state(),
         ]);
     }
 
@@ -115,9 +152,6 @@ trait LinkAI_Frontend_Ajax
         check_ajax_referer(self::NONCE_ACTION, 'nonce');
 
         $options = self::get_options();
-        if (empty($options['api_key'])) {
-            wp_send_json_error(['message' => '请先在后台配置 LinkAI API Key。'], 400);
-        }
 
         $message = isset($_POST['message']) ? sanitize_textarea_field(wp_unslash($_POST['message'])) : '';
         $history_json = isset($_POST['history']) ? wp_unslash($_POST['history']) : '[]';
@@ -132,6 +166,26 @@ trait LinkAI_Frontend_Ajax
         }
         if ($options['require_contact'] === '1' && $contact === '') {
             wp_send_json_error(['message' => '请先留下电话或微信，方便客服继续跟进。'], 400);
+        }
+
+        $reception_state = self::get_reception_state();
+        if (empty($reception_state['is_online'])) {
+            $pause_state = self::record_customer_question($conversation_id, $customer_name, $contact, $message);
+            wp_send_json_success([
+                'reply' => $reception_state['message'],
+                'conversation_id' => $conversation_id,
+                'trace_id' => '',
+                'message_id' => $pause_state['message_id'],
+                'ai_paused' => true,
+                'offline' => true,
+                'reception_state' => $reception_state,
+                'human_takeover_timeout' => (int) $options['human_takeover_timeout'],
+                'suggested_questions' => [],
+            ]);
+        }
+
+        if (empty($options['api_key'])) {
+            wp_send_json_error(['message' => '请先在后台配置 LinkAI API Key。'], 400);
         }
 
         $history = json_decode($history_json, true);
@@ -163,6 +217,7 @@ trait LinkAI_Frontend_Ajax
                 'message_id' => $pause_state['message_id'],
                 'ai_paused' => true,
                 'human_takeover_timeout' => (int) $options['human_takeover_timeout'],
+                'reception_state' => $reception_state,
                 'suggested_questions' => [],
             ]);
         }
@@ -216,6 +271,7 @@ trait LinkAI_Frontend_Ajax
             'message_id' => $message_ids['assistant_id'],
             'ai_paused' => false,
             'human_takeover_timeout' => (int) $options['human_takeover_timeout'],
+            'reception_state' => $reception_state,
             'suggested_questions' => $data['suggested_questions'] ?? [],
         ]);
     }

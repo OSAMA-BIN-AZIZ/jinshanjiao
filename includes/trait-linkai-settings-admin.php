@@ -154,6 +154,14 @@ trait LinkAI_Settings_Admin
             'require_contact' => !empty($input['require_contact']) ? '1' : '0',
             'notify_new_messages' => !empty($input['notify_new_messages']) ? '1' : '0',
             'notification_email' => !empty($input['notification_email']) && is_email($input['notification_email']) ? sanitize_email($input['notification_email']) : $defaults['notification_email'],
+            'business_hours_enabled' => !empty($input['business_hours_enabled']) ? '1' : '0',
+            'business_timezone' => isset($input['business_timezone']) ? self::sanitize_business_timezone($input['business_timezone']) : $defaults['business_timezone'],
+            'business_days' => isset($input['business_days']) && is_array($input['business_days']) ? self::sanitize_business_days($input['business_days']) : $defaults['business_days'],
+            'business_start_time' => isset($input['business_start_time']) ? self::sanitize_business_time($input['business_start_time'], $defaults['business_start_time']) : $defaults['business_start_time'],
+            'business_end_time' => isset($input['business_end_time']) ? self::sanitize_business_time($input['business_end_time'], $defaults['business_end_time']) : $defaults['business_end_time'],
+            'online_status_message' => isset($input['online_status_message']) ? sanitize_text_field($input['online_status_message']) : $defaults['online_status_message'],
+            'offline_status_message' => isset($input['offline_status_message']) ? sanitize_text_field($input['offline_status_message']) : $defaults['offline_status_message'],
+            'browser_notifications' => !empty($input['browser_notifications']) ? '1' : '0',
             'human_takeover_timeout' => isset($input['human_takeover_timeout']) ? min(1440, max(0, (int) $input['human_takeover_timeout'])) : $defaults['human_takeover_timeout'],
             'update_repo_url' => isset($input['update_repo_url']) ? esc_url_raw(trim($input['update_repo_url'])) : $defaults['update_repo_url'],
             'update_branch' => isset($input['update_branch']) ? self::sanitize_update_branch($input['update_branch']) : $defaults['update_branch'],
@@ -228,6 +236,45 @@ trait LinkAI_Settings_Admin
                             <p><input id="linkai-notification-email" name="<?php echo esc_attr(self::OPTION_NAME); ?>[notification_email]" type="email" class="regular-text" value="<?php echo esc_attr($options['notification_email']); ?>" placeholder="<?php echo esc_attr(get_option('admin_email')); ?>" /></p>
                             <p class="description">用于补齐类似 tawk.to 的基础提醒能力。服务器需配置可用的 WordPress 邮件发送能力；如果没有收到邮件，请检查 SMTP/主机邮件配置。</p>
                         </td>
+                    </tr>
+
+                    <tr>
+                        <th scope="row">接待时间</th>
+                        <td>
+                            <label><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[business_hours_enabled]" type="checkbox" value="1" <?php checked($options['business_hours_enabled'], '1'); ?> /> 启用工作时间，非工作时间显示离线接待</label>
+                            <p>
+                                <label for="linkai-business-timezone">时区</label>
+                                <select id="linkai-business-timezone" name="<?php echo esc_attr(self::OPTION_NAME); ?>[business_timezone]">
+                                    <?php foreach (timezone_identifiers_list() as $timezone) : ?>
+                                        <option value="<?php echo esc_attr($timezone); ?>" <?php selected($options['business_timezone'], $timezone); ?>><?php echo esc_html($timezone); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </p>
+                            <p>
+                                <?php $selected_days = array_filter(array_map('intval', explode(',', (string) $options['business_days']))); ?>
+                                <?php foreach ([1 => '周一', 2 => '周二', 3 => '周三', 4 => '周四', 5 => '周五', 6 => '周六', 7 => '周日'] as $day => $label) : ?>
+                                    <label style="margin-right:10px;"><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[business_days][]" type="checkbox" value="<?php echo esc_attr((string) $day); ?>" <?php checked(in_array($day, $selected_days, true)); ?> /> <?php echo esc_html($label); ?></label>
+                                <?php endforeach; ?>
+                            </p>
+                            <p>
+                                <label for="linkai-business-start">开始</label>
+                                <input id="linkai-business-start" name="<?php echo esc_attr(self::OPTION_NAME); ?>[business_start_time]" type="time" value="<?php echo esc_attr($options['business_start_time']); ?>" />
+                                <label for="linkai-business-end">结束</label>
+                                <input id="linkai-business-end" name="<?php echo esc_attr(self::OPTION_NAME); ?>[business_end_time]" type="time" value="<?php echo esc_attr($options['business_end_time']); ?>" />
+                            </p>
+                            <p class="description">关闭时默认 24 小时在线。启用后，非工作时间仍会保存访客留言，并按邮件通知设置提醒客服。</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">在线/离线文案</th>
+                        <td>
+                            <p><label for="linkai-online-message">在线文案</label><br><input id="linkai-online-message" name="<?php echo esc_attr(self::OPTION_NAME); ?>[online_status_message]" type="text" class="regular-text" value="<?php echo esc_attr($options['online_status_message']); ?>" /></p>
+                            <p><label for="linkai-offline-message">离线文案</label><br><input id="linkai-offline-message" name="<?php echo esc_attr(self::OPTION_NAME); ?>[offline_status_message]" type="text" class="regular-text" value="<?php echo esc_attr($options['offline_status_message']); ?>" /></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">浏览器提醒</th>
+                        <td><label><input name="<?php echo esc_attr(self::OPTION_NAME); ?>[browser_notifications]" type="checkbox" value="1" <?php checked($options['browser_notifications'], '1'); ?> /> 工作台新消息到达时播放提示音并触发浏览器通知</label><p class="description">浏览器会要求客服授权通知权限；未授权时只播放提示音。</p></td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="linkai-human-timeout">人工接管超时</label></th>
@@ -321,6 +368,66 @@ trait LinkAI_Settings_Admin
         return $options;
     }
 
+    private static function sanitize_business_timezone(string $timezone): string
+    {
+        $timezone = sanitize_text_field($timezone);
+        if (in_array($timezone, timezone_identifiers_list(), true)) {
+            return $timezone;
+        }
+        $fallback = function_exists('wp_timezone_string') ? wp_timezone_string() : '';
+        return in_array($fallback, timezone_identifiers_list(), true) ? $fallback : 'UTC';
+    }
+
+    private static function sanitize_business_days(array $days): string
+    {
+        $clean_days = [];
+        foreach ($days as $day) {
+            $day = (int) $day;
+            if ($day >= 1 && $day <= 7) {
+                $clean_days[] = $day;
+            }
+        }
+        $clean_days = array_values(array_unique($clean_days));
+        sort($clean_days);
+        return implode(',', $clean_days);
+    }
+
+    private static function sanitize_business_time(string $time, string $fallback): string
+    {
+        $time = sanitize_text_field($time);
+        return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $time) ? $time : $fallback;
+    }
+
+    private static function get_reception_state(): array
+    {
+        $options = self::get_options();
+        $online_message = $options['online_status_message'] ?: '在线接待中，通常几秒内回复';
+        $offline_message = $options['offline_status_message'] ?: '当前为离线时间，请留下问题和联系方式，我们会尽快回复。';
+
+        if (($options['business_hours_enabled'] ?? '0') !== '1') {
+            return ['is_online' => true, 'label' => '在线接待中', 'message' => $online_message];
+        }
+
+        $timezone = self::sanitize_business_timezone((string) ($options['business_timezone'] ?? 'UTC'));
+        $now = new DateTimeImmutable('now', new DateTimeZone($timezone));
+        $weekday = (int) $now->format('N');
+        $days = array_filter(array_map('intval', explode(',', (string) ($options['business_days'] ?? ''))));
+        if (!in_array($weekday, $days, true)) {
+            return ['is_online' => false, 'label' => '离线留言中', 'message' => $offline_message];
+        }
+
+        $current = $now->format('H:i');
+        $start = self::sanitize_business_time((string) ($options['business_start_time'] ?? '09:00'), '09:00');
+        $end = self::sanitize_business_time((string) ($options['business_end_time'] ?? '18:00'), '18:00');
+        $is_online = $start <= $end ? ($current >= $start && $current <= $end) : ($current >= $start || $current <= $end);
+
+        return [
+            'is_online' => $is_online,
+            'label' => $is_online ? '在线接待中' : '离线留言中',
+            'message' => $is_online ? $online_message : $offline_message,
+        ];
+    }
+
     private static function default_options(): array
     {
         return [
@@ -335,6 +442,14 @@ trait LinkAI_Settings_Admin
             'require_contact' => '0',
             'notify_new_messages' => '0',
             'notification_email' => (string) get_option('admin_email'),
+            'business_hours_enabled' => '0',
+            'business_timezone' => self::sanitize_business_timezone(function_exists('wp_timezone_string') ? wp_timezone_string() : 'UTC'),
+            'business_days' => '1,2,3,4,5',
+            'business_start_time' => '09:00',
+            'business_end_time' => '18:00',
+            'online_status_message' => '在线接待中，通常几秒内回复',
+            'offline_status_message' => '当前为离线时间，请留下问题和联系方式，我们会尽快回复。',
+            'browser_notifications' => '1',
             'human_takeover_timeout' => 3,
             'update_repo_url' => 'https://github.com/OSAMA-BIN-AZIZ/jinshanjiao',
             'update_branch' => 'main',

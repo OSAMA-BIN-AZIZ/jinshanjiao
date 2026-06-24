@@ -41,6 +41,9 @@ trait LinkAI_Database
             follow_up_at datetime NULL,
             status varchar(30) NOT NULL DEFAULT 'new',
             notes text NULL,
+            satisfaction_score tinyint(1) NOT NULL DEFAULT 0,
+            satisfaction_comment varchar(255) NOT NULL DEFAULT '',
+            satisfaction_at datetime NULL,
             created_at datetime NOT NULL,
             updated_at datetime NOT NULL,
             PRIMARY KEY  (id),
@@ -55,7 +58,8 @@ trait LinkAI_Database
             KEY priority (priority),
             KEY follow_up_at (follow_up_at),
             KEY ip_address (ip_address),
-            KEY contact (contact)
+            KEY contact (contact),
+            KEY satisfaction_score (satisfaction_score)
         ) {$charset_collate};");
 
         dbDelta("CREATE TABLE {$messages_table} (
@@ -152,6 +156,9 @@ trait LinkAI_Database
             'priority' => "ALTER TABLE " . $customers_table . " ADD priority varchar(20) NOT NULL DEFAULT 'normal' AFTER closed_at",
             'tags' => "ALTER TABLE " . $customers_table . " ADD tags varchar(255) NOT NULL DEFAULT '' AFTER priority",
             'follow_up_at' => 'ALTER TABLE ' . $customers_table . ' ADD follow_up_at datetime NULL AFTER tags',
+            'satisfaction_score' => 'ALTER TABLE ' . $customers_table . ' ADD satisfaction_score tinyint(1) NOT NULL DEFAULT 0 AFTER notes',
+            'satisfaction_comment' => "ALTER TABLE " . $customers_table . " ADD satisfaction_comment varchar(255) NOT NULL DEFAULT '' AFTER satisfaction_score",
+            'satisfaction_at' => 'ALTER TABLE ' . $customers_table . ' ADD satisfaction_at datetime NULL AFTER satisfaction_comment',
         ];
         foreach ($upgrade_columns as $column_name => $sql) {
             $column = $wpdb->get_var($wpdb->prepare('SHOW COLUMNS FROM ' . $customers_table . ' LIKE %s', $column_name));
@@ -167,6 +174,7 @@ trait LinkAI_Database
             'closed_at' => 'ALTER TABLE ' . $customers_table . ' ADD INDEX closed_at (closed_at)',
             'priority' => 'ALTER TABLE ' . $customers_table . ' ADD INDEX priority (priority)',
             'follow_up_at' => 'ALTER TABLE ' . $customers_table . ' ADD INDEX follow_up_at (follow_up_at)',
+            'satisfaction_score' => 'ALTER TABLE ' . $customers_table . ' ADD INDEX satisfaction_score (satisfaction_score)',
         ];
         foreach ($upgrade_indexes as $index_name => $sql) {
             $index = $wpdb->get_var($wpdb->prepare('SHOW INDEX FROM ' . $customers_table . ' WHERE Key_name = %s', $index_name));
