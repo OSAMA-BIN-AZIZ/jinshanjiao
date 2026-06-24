@@ -4,7 +4,7 @@ Tags: ai, customer-service, chat, chatbot, crm
 Requires at least: 5.8
 Tested up to: 6.9.4
 Requires PHP: 7.4
-Stable tag: 1.3.14
+Stable tag: 1.3.44
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,7 +20,7 @@ LinkAI 智能 AI 客服可以在网站右下角显示客服聊天窗口，通过
 * 支持短代码 `[linkai_customer_service]` 嵌入指定页面。
 * 后台配置 LinkAI API Key、应用 Code、模型、温度、欢迎语和系统提示词。
 * 自动携带最近上下文，支持连续对话。
-* 自动保存客户姓名、联系方式、IP、国家/地区、设备、咨询内容、AI 回复和完整聊天记录。
+* 自动保存客户姓名、联系方式、咨询部门、IP、国家/地区、设备、咨询内容、AI 回复和完整聊天记录。
 * 后台「LinkAI 客服 → 客户管理」可编辑客户资料、跟进状态和备注。
 * 提供 GitHub 更新排查、缓存清除和插件目录权限修复入口。
 
@@ -98,3 +98,6 @@ WordPress 更新会自动下载 ZIP 并解压。这个提示通常表示 ZIP 包
 = 1.3.0 =
 * 增加客户管理、跟进状态和备注。
 * 改进 GitHub 更新目录处理。
+
+== LinkAI tawk.to parity roadmap ==
+Current builds include realtime workspace, online visitors, human takeover, business hours/offline messages, triggers, knowledge base, reports, basic ticket states, attachments and PWA manifest. See README.md and TODO.md for the current roadmap and remaining differences from a full tawk.to-like SaaS platform.

@@ -179,3 +179,79 @@
         flex-direction: column;
     }
 }
+
+.linkai-chat--human-takeover .linkai-chat__header {
+    background: linear-gradient(135deg, #0f766e, #111827);
+}
+
+.linkai-chat--human-takeover .linkai-chat__header span::after {
+    content: " · 人工接管中";
+    font-weight: 700;
+}
+
+.linkai-chat__message--human {
+    border-left: 3px solid #0f766e;
+    box-shadow: 0 8px 20px rgba(15, 118, 110, 0.12);
+}
+
+.linkai-chat--offline .linkai-chat__header {
+    background: linear-gradient(135deg, #334155, #64748b);
+}
+
+.linkai-chat__satisfaction {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    color: #475569;
+    font-size: 13px;
+}
+
+.linkai-chat__satisfaction button {
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: #fff;
+    cursor: pointer;
+    font: inherit;
+}
+
+.linkai-chat__attachment {
+    max-width: 92px;
+    font-size: 12px;
+}
+
+@media (max-width: 782px) {
+    .linkai-chat {
+        right: 12px;
+        bottom: 12px;
+    }
+    .linkai-chat__panel {
+        width: calc(100vw - 24px);
+        height: min(640px, calc(100vh - 24px));
+    }
+    .linkai-chat__composer {
+        flex-wrap: wrap;
+    }
+}
+
+.linkai-chat--left {
+    right: auto;
+    left: 24px;
+}
+
+.linkai-chat__toggle,
+.linkai-chat__send,
+.linkai-chat__message--user {
+    background: var(--linkai-primary, #d71920);
+}
+
+.linkai-chat__header {
+    background: linear-gradient(135deg, #111827, var(--linkai-primary, #d71920));
+}
+
+@media (max-width: 782px) {
+    .linkai-chat--left {
+        left: 12px;
+    }
+}
