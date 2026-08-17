@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Jinshanjiao 安全教程与下载
+ * Plugin Name: Analyze
  * Description: 在主域名下提供隐藏教程页面、每次下载密码验证、60 秒一次性下载链接，并与现有 LinkAI 客服共存。
  * Version: 1.0.0
- * Author: Jinshanjiao
+ * Author: Analyze
  * License: GPL-2.0-or-later
  * Text Domain: jinshanjiao-secure-tutorial
  */
@@ -120,7 +120,7 @@ final class Jinshanjiao_Secure_Tutorial_Download
 
     public static function add_admin_menu(): void
     {
-        add_menu_page('安全教程与下载', '教程下载', 'manage_options', 'jinshanjiao-secure-tutorial', [__CLASS__, 'render_settings_page'], 'dashicons-lock', 59);
+        add_menu_page('Analyze', 'Analyze', 'manage_options', 'jinshanjiao-secure-tutorial', [__CLASS__, 'render_settings_page'], 'dashicons-lock', 59);
     }
 
     public static function render_settings_page(): void
@@ -136,7 +136,7 @@ final class Jinshanjiao_Secure_Tutorial_Download
         $error = isset($_GET['jsd_error']) ? sanitize_text_field(wp_unslash($_GET['jsd_error'])) : '';
         ?>
         <div class="wrap">
-            <h1>Jinshanjiao 安全教程与下载</h1>
+            <h1>Analyze</h1>
             <?php if ($saved) : ?><div class="notice notice-success is-dismissible"><p>设置已保存。</p></div><?php endif; ?>
             <?php if ($error !== '') : ?><div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div><?php endif; ?>
             <p>教程页面使用隐藏路径直接访问；下载文件每次都要验证密码，验证后只生成一个 60 秒有效、仅可使用一次的下载链接。</p>
