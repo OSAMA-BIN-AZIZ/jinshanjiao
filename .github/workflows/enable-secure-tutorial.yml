@@ -1,0 +1,61 @@
+name: Enable secure tutorial module
+
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-secure-tutorial.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch main plugin
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('linkai-ai-customer-service.php')
+          s = p.read_text(encoding='utf-8')
+
+          marker = "if (!defined('ABSPATH')) {\n    exit;\n}\n"
+          loader = """
+
+// Jinshanjiao 教程与安全下载模块。保持与主 AI 客服同一插件目录，GitHub 更新后自动加载。
+$jinshanjiao_secure_tutorial = __DIR__ . '/secure-tutorial-download.php';
+if (is_file($jinshanjiao_secure_tutorial)) {
+    require_once $jinshanjiao_secure_tutorial;
+}
+$jinshanjiao_tutorial_ai = __DIR__ . '/secure-tutorial-ai-enhancement.php';
+if (is_file($jinshanjiao_tutorial_ai)) {
+    require_once $jinshanjiao_tutorial_ai;
+}
+"""
+          if 'secure-tutorial-download.php' not in s:
+              if marker not in s:
+                  raise SystemExit('ABSPATH marker not found')
+              s = s.replace(marker, marker + loader, 1)
+
+          # Bump remote version so the existing GitHub updater shows a WordPress update.
+          s = s.replace(' * Version: 1.3.21', ' * Version: 1.3.22', 1)
+          s = s.replace("private const VERSION = '1.3.21';", "private const VERSION = '1.3.22';", 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit patched plugin
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add linkai-ai-customer-service.php
+          git commit -m "Load secure tutorial module from main plugin"
+          git push
