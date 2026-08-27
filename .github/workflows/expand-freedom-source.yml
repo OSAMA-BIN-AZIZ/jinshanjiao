@@ -5,8 +5,7 @@ on:
     branches:
       - backup-main-before-rollback-20260817
     paths:
-      - 'freedom/secure-tutorial-download.php.gz'
-      - '.github/workflows/expand-freedom-source.yml'
+      - 'freedom/source-v1.6.8.ready'
 
 permissions:
   contents: write
@@ -16,16 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Expand source
+      - name: Rebuild freedom v1.6.8 source
         run: |
+          cat freedom/source-v1.6.8.part1.b64 freedom/source-v1.6.8.part2.b64 freedom/source-v1.6.8.part3.b64 freedom/source-v1.6.8.part4.b64 > /tmp/freedom-source.b64
+          base64 -d /tmp/freedom-source.b64 > freedom/secure-tutorial-download.php.gz
+          gzip -t freedom/secure-tutorial-download.php.gz
           gzip -dc freedom/secure-tutorial-download.php.gz > freedom/secure-tutorial-download.php
-      - name: Commit expanded source
+          php -l freedom/secure-tutorial-download.php
+      - name: Commit synchronized source
         run: |
-          if git diff --quiet -- freedom/secure-tutorial-download.php; then
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add freedom/secure-tutorial-download.php
-          git commit -m "Expand freedom v1.6.4 source"
+          git add freedom/secure-tutorial-download.php.gz freedom/secure-tutorial-download.php
+          git rm -f freedom/source-v1.6.8.part1.b64 freedom/source-v1.6.8.part2.b64 freedom/source-v1.6.8.part3.b64 freedom/source-v1.6.8.part4.b64 freedom/source-v1.6.8.ready
+          git commit -m "Sync freedom v1.6.8 source"
           git push
