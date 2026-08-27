@@ -1,0 +1,31 @@
+name: Expand freedom source
+
+on:
+  push:
+    branches:
+      - backup-main-before-rollback-20260817
+    paths:
+      - 'freedom/secure-tutorial-download.php.gz'
+      - '.github/workflows/expand-freedom-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand source
+        run: |
+          gzip -dc freedom/secure-tutorial-download.php.gz > freedom/secure-tutorial-download.php
+      - name: Commit expanded source
+        run: |
+          if git diff --quiet -- freedom/secure-tutorial-download.php; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add freedom/secure-tutorial-download.php
+          git commit -m "Expand freedom v1.6.4 source"
+          git push
